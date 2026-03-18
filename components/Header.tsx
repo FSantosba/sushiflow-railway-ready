@@ -2,6 +2,7 @@ import React from 'react';
 
 interface HeaderProps {
     currentView: string;
+    onMenuToggle: () => void;
 }
 
 const getPageTitle = (view: string) => {
@@ -21,14 +22,20 @@ const getPageTitle = (view: string) => {
     }
 };
 
-const Header: React.FC<HeaderProps> = ({ currentView }) => {
+const Header: React.FC<HeaderProps> = ({ currentView, onMenuToggle }) => {
     return (
-        <header className="h-16 bg-card-dark border-b border-border-dark flex items-center justify-between px-6 shrink-0">
-            <div className="flex items-center gap-4">
-                <h2 className="text-lg font-bold text-white tracking-tight">
+        <header className="h-16 bg-card-dark border-b border-border-dark flex items-center justify-between px-4 md:px-6 shrink-0 z-30">
+            <div className="flex items-center gap-2 md:gap-4">
+                <button 
+                  onClick={onMenuToggle}
+                  className="p-2 md:hidden text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5 border border-border-dark flex items-center justify-center"
+                >
+                    <span className="material-symbols-outlined">menu</span>
+                </button>
+                <h2 className="text-lg font-bold text-white tracking-tight hidden sm:block">
                     {getPageTitle(currentView)}
                 </h2>
-                <div className="h-4 w-px bg-border-dark mx-2" />
+                <div className="h-4 w-px bg-border-dark mx-2 hidden sm:block" />
                 <div className="flex items-center gap-2 text-xs text-gray-400">
                     <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
                     <span>Sistema Operacional</span>

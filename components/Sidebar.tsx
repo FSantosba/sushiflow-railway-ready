@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 interface SidebarProps {
     activeView: string;
     onNavigate: (view: string) => void;
+    isOpen: boolean;
+    onClose: () => void;
 }
 
 const menuItems = [
@@ -33,20 +35,36 @@ const ROLE_LABELS: Record<string, string> = {
     cashier: 'Caixa',
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, isOpen, onClose }) => {
     const { currentUser, logout } = useAuth();
     const userRole = currentUser?.role || 'manager';
     const visibleItems = menuItems.filter(item => item.roles.includes(userRole));
 
     return (
-        <aside className="w-64 bg-card-dark border-r border-border-dark flex flex-col h-full">
-            <div className="p-6 flex items-center gap-3 border-b border-border-dark">
+        <>
+            {/* Mobile Backdrop */}
+            {isOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm transition-opacity"
+                    onClick={onClose}
+                />
+            )}
+            
+            <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-card-dark border-r border-border-dark flex flex-col h-full transform transition-transform duration-300 md:relative md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                <div className="p-6 flex items-center justify-between md:justify-start gap-3 border-b border-border-dark">
                 <div className="w-8 h-8 rounded bg-primary flex items-center justify-center">
                     <span className="material-symbols-outlined text-white text-md">sushi_roll</span>
                 </div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+                <h1 className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent flex-1">
                     SushiFlow
                 </h1>
+                
+                <button 
+                  onClick={onClose}
+                  className="md:hidden p-1 text-gray-400 hover:text-white rounded-md flex items-center justify-center bg-white/5"
+                >
+                    <span className="material-symbols-outlined text-xl">close</span>
+                </button>
             </div>
 
             <nav className="flex-1 overflow-y-auto py-4 px-3 custom-scrollbar">
@@ -101,6 +119,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate }) => {
                 </button>
             </div>
         </aside>
+        </>
     );
 };
 

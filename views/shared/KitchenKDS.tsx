@@ -292,9 +292,9 @@ const KitchenKDS: React.FC = () => {
       </div>
 
       {/* Grid de Pedidos Ampliado */}
-      <div className="flex-1 overflow-x-auto p-6 flex gap-6 custom-scrollbar bg-[#0b1216]">
+      <div className="flex-1 overflow-x-auto p-4 md:p-6 flex gap-4 md:gap-6 custom-scrollbar bg-[#0b1216] snap-x snap-mandatory">
         {filteredOrders.map((order) => (
-          <div key={order.id} className={`w-[380px] shrink-0 flex flex-col bg-[#1a2329] rounded-[2rem] shadow-2xl overflow-hidden border transition-all animate-in fade-in slide-in-from-bottom-4 ${viewMode === 'history' ? 'border-slate-700/30 opacity-75' :
+          <div key={order.id} className={`w-[85vw] sm:w-[320px] md:w-[380px] shrink-0 snap-center flex flex-col bg-[#1a2329] rounded-[2rem] shadow-2xl overflow-hidden border transition-all animate-in fade-in slide-in-from-bottom-4 ${viewMode === 'history' ? 'border-slate-700/30 opacity-75' :
             order.status === 'atrasado' ? 'border-danger/30 animate-pulse-danger' :
               order.status === 'atencao' ? 'border-warning/20' : 'border-white/5'
             }`}>

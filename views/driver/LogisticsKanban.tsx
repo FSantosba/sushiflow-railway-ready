@@ -224,11 +224,11 @@ const LogisticsKanban: React.FC = () => {
       </div>
 
       {/* Kanban Board */}
-      <div className="flex-1 overflow-x-auto p-6 flex gap-6 custom-scrollbar">
+      <div className="flex-1 overflow-x-auto p-4 md:p-6 flex gap-4 md:gap-6 custom-scrollbar snap-x snap-mandatory">
         {columns.map((col) => {
           const colOrders = filteredOrders.filter(o => o.status === col.status);
           return (
-            <div key={col.status} className="w-[340px] flex flex-col gap-4 shrink-0">
+            <div key={col.status} className="w-[85vw] md:w-[340px] flex flex-col gap-4 shrink-0 snap-center">
               <div className="flex items-center justify-between px-2">
                 <div className="flex items-center gap-2">
                   <span className={`text-[10px] font-black uppercase tracking-[0.25em] ${col.status === OrderStatus.PENDING ? 'text-rose-500' :

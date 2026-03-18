@@ -29,6 +29,7 @@ import AdminDashboardView from './views/admin/AdminDashboardView';
 const AppContent: React.FC = () => {
   const { currentUser } = useAuth();
   const [activeView, setActiveView] = useState('dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (currentUser?.role === 'kitchen') {
@@ -69,9 +70,17 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-background-dark text-slate-100 overflow-hidden font-sans">
-      <Sidebar activeView={activeView} onNavigate={setActiveView} />
+      <Sidebar 
+        activeView={activeView} 
+        onNavigate={(view) => { setActiveView(view); setIsMobileMenuOpen(false); }} 
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+      />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header currentView={activeView} />
+        <Header 
+          currentView={activeView} 
+          onMenuToggle={() => setIsMobileMenuOpen(true)}
+        />
         <main className="flex-1 overflow-hidden">
           {renderContent()}
         </main>

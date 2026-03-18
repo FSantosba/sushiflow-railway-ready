@@ -3,8 +3,8 @@ import { useTables } from '../../context/TableContext';
 import { useOrders } from '../../context/OrdersContext';
 import { useReservations } from '../../context/ReservationContext';
 import { useCMV } from '../../context/CMVContext';
-import { TableStatus } from '../../types';
-
+import { TableStatus, OrderStatus } from '../../types';
+import type { CartItem } from '../../context/TableContext';
 const DashboardView: React.FC = () => {
     const { tables, openTables, closedTickets } = useTables();
     const { orders } = useOrders();
@@ -25,8 +25,8 @@ const DashboardView: React.FC = () => {
     const reservadas = tables.filter(t => t.status === TableStatus.RESERVED).length;
     const ocupacaoRate = Math.round((ocupadas / tables.length) * 100);
 
-    const pedidosAtivos = orders.filter(o => o.status === 'PENDENTE' || o.status === 'EM PREPARO').length;
-    const pedidosEntrega = orders.filter(o => o.status === 'SAIU PARA ENTREGA').length;
+    const pedidosAtivos = orders.filter(o => o.status === OrderStatus.PENDING || o.status === OrderStatus.PREPARING).length;
+    const pedidosEntrega = orders.filter(o => o.status === OrderStatus.DELIVERY).length;
 
     // Filtro de período
     const periodMs = periodFilter === 'today' ? 24 * 60 * 60 * 1000
@@ -39,11 +39,11 @@ const DashboardView: React.FC = () => {
     const ticketMedio = ticketsHoje > 0 ? faturamentoHoje / ticketsHoje : 0;
 
     const faturamentoMesas = Object.entries(openTables).reduce((acc, [_, items]) => {
-        return acc + (items as import('../context/TableContext').CartItem[]).reduce((s, i) => s + i.price * i.qty, 0);
+        return acc + (items as CartItem[]).reduce((s, i) => s + i.price * i.qty, 0);
     }, 0);
 
-    const itensNaCozinha = (Object.values(openTables).flat() as import('../context/TableContext').CartItem[]).filter(i => i.status === 'PENDING').length;
-    const itensProntos = (Object.values(openTables).flat() as import('../context/TableContext').CartItem[]).filter(i => i.status === 'READY').length;
+    const itensNaCozinha = (Object.values(openTables).flat() as CartItem[]).filter(i => i.status === 'PENDING').length;
+    const itensProntos = (Object.values(openTables).flat() as CartItem[]).filter(i => i.status === 'READY').length;
 
     // ✨ Tempo médio de preparo REAL do KDS (baseado no histórico de tickets e mesas abertas)
     let totalPrepMs = 0;
@@ -58,7 +58,7 @@ const DashboardView: React.FC = () => {
         });
     });
 
-    const openReadyItems = (Object.values(openTables).flat() as import('../context/TableContext').CartItem[])
+    const openReadyItems = (Object.values(openTables).flat() as CartItem[])
         .filter(i => (i.status === 'READY' || i.status === 'SERVED') && i.readyAt);
 
     openReadyItems.forEach(item => {
@@ -105,7 +105,7 @@ const DashboardView: React.FC = () => {
 
             <div className="p-8 space-y-8 pb-16">
                 {/* KPIs Principais */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <KpiCard
                         label="Faturamento"
                         value={`R$ ${faturamentoHoje.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
@@ -256,8 +256,8 @@ const DashboardView: React.FC = () => {
                         <p className="text-sm font-black text-slate-500 uppercase tracking-widest mt-4">Nenhum ticket fechado ainda</p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                    <div className="overflow-x-auto w-full">
+                        <table className="w-full text-left whitespace-nowrap">
                             <thead>
                                 <tr className="bg-black/20 text-[10px] font-black uppercase text-slate-500 tracking-widest border-b border-white/5">
                                     <th className="px-6 py-3">Mesa</th>
