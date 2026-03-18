@@ -1,0 +1,33 @@
+﻿
+app.get('/api/produtos'
+, async (req, res) => {
+app.get('/api/rastreame
+nto/:pedido_id', async 
+(req, res) => {
+app.get('/api/pedidos/:
+id', async (req, res) 
+=> {
+app.get('/api/admin/sta
+ts', async (req, res) 
+=> {
+app.get('/api/admin/kit
+chen', async (req, 
+res) => {
+app.get('/api/admin/map
+-tracking', async 
+(req, res) => {
+app.get('/api/admin/pea
+k-data', async (req, 
+res) => {
+app.get('/api/driver/wa
+llet/:id', async (req, 
+res) => {
+app.get('/api/admin/pay
+outs', async (req, 
+res) => {
+app.get('/api/health', 
+(req, res) => {
+app.get('/:path(.*)', 
+(req, res) => {
+
+

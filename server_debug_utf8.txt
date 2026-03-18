@@ -1,0 +1,9 @@
+﻿[dotenv@17.3.1] injecting env (0) from .env -- tip: ­ƒñû agentic secret storage: https://dotenvx.com/as2
+Ô£à SushiFlow Backend rodando na porta 3001
+node : ÔÜá´©Å Banco de dados n├úo dispon├¡vel. Entrando em MOCK MODE para testes.
+No linha:1 caractere:65
++ ... n SilentlyContinue; node server/api_server.js > server_debug.txt 2>&1
++                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo              : NotSpecified: (ÔÜá    ´©Å Banco de...DE para     testes.:String) [], R    emoteException
+    + FullyQualifiedErrorI    d : NativeCommandError
+ 

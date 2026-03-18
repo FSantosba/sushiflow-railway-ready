@@ -1,0 +1,5 @@
+{
+  "name": "SushiFlow Unified Suite",
+  "description": "A comprehensive real-time management system for Japanese restaurants, featuring logistics kanban, financial reports, KDS kitchen monitors, and interactive table mapping.",
+  "requestFramePermissions": []
+}

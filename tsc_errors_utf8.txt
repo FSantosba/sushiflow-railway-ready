@@ -1,0 +1,24 @@
+﻿views/CustomerTrackingView.tsx(51,30): error TS2339: Property 'NEW' does not exist on type 'typeof OrderStatus'.
+views/CustomerTrackingView.tsx(52,30): error TS2339: Property 'PENDING' does not exist on type 'typeof OrderStatus'.
+views/CustomerTrackingView.tsx(53,30): error TS2339: Property 'PREPARING' does not exist on type 'typeof OrderStatus'.
+views/CustomerTrackingView.tsx(54,30): error TS2339: Property 'DELIVERY' does not exist on type 'typeof OrderStatus'.
+views/CustomerTrackingView.tsx(55,30): error TS2339: Property 'COMPLETED' does not exist on type 'typeof OrderStatus'.
+views/DeliveryAppView.tsx(166,33): error TS2339: Property 'PREPARING' does not exist on type 'typeof OrderStatus'.
+views/DriverAppView.tsx(74,34): error TS2339: Property 'PREPARING' does not exist on type 'typeof OrderStatus'.
+views/DriverAppView.tsx(79,71): error TS2339: Property 'DELIVERY' does not exist on type 'typeof OrderStatus'.
+views/DriverAppView.tsx(108,51): error TS2339: Property 'DELIVERY' does not exist on type 'typeof OrderStatus'.
+views/DriverAppView.tsx(117,66): error TS2339: Property 'COMPLETED' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(26,72): error TS2339: Property 'PENDING' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(64,7): error TS2353: Object literal may only specify known properties, and 'customer' does not exist in type 'Order'.
+views/LogisticsKanban.tsx(69,27): error TS2339: Property 'NEW' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(76,49): error TS2339: Property 'PENDING' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(87,58): error TS2339: Property 'customer' does not exist on type 'Order'.
+views/LogisticsKanban.tsx(93,27): error TS2339: Property 'NEW' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(94,27): error TS2339: Property 'PENDING' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(95,27): error TS2339: Property 'PREPARING' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(96,27): error TS2339: Property 'DELIVERY' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(97,27): error TS2339: Property 'COMPLETED' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(207,117): error TS2339: Property 'PENDING' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(208,48): error TS2339: Property 'PREPARING' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(209,50): error TS2339: Property 'DELIVERY' does not exist on type 'typeof OrderStatus'.
+views/LogisticsKanban.tsx(268,49): error TS2339: Property 'NEW' does not exist on type 'typeof OrderStatus'.
