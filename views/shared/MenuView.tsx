@@ -99,45 +99,46 @@ const MenuView: React.FC = () => {
     <div className="h-full flex flex-col bg-[#0d1117] relative">
 
       {/* Header */}
-      <div className="p-6 border-b border-border-dark bg-card-dark/20 flex flex-col md:flex-row md:items-center justify-between gap-6 shrink-0">
+      <div className="p-4 md:p-6 border-b border-border-dark bg-card-dark/20 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 shrink-0 mt-14 md:mt-0">
         <div className="flex items-center gap-4 self-start">
-          <h2 className="text-xl font-black uppercase italic tracking-wider text-white flex items-center gap-3">
-             <span className="material-symbols-outlined text-primary text-2xl">restaurant_menu</span>
-             Gestão de Cardápio
+          <h2 className="text-lg md:text-xl font-black uppercase italic tracking-wider text-white flex items-center gap-2 md:gap-3">
+             <span className="material-symbols-outlined text-primary text-xl md:text-2xl">restaurant_menu</span>
+             Cardápio
           </h2>
           {isLoading && (
-            <span className="text-xs font-bold text-slate-400 animate-pulse bg-white/5 px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-2">
-              <span className="size-2 rounded-full bg-primary animate-ping"></span>
-              Sincronizando com DB...
+            <span className="text-[10px] md:text-xs font-bold text-slate-400 animate-pulse bg-white/5 px-2 md:px-3 py-1 md:py-1.5 rounded-full border border-white/10 flex items-center gap-1.5 md:gap-2">
+              <span className="size-1.5 md:size-2 rounded-full bg-primary animate-ping"></span>
+              <span className="hidden md:inline">Sincronizando com DB...</span>
+              <span className="md:hidden">Sincronizando...</span>
             </span>
           )}
           {fetchError && (
-             <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-3 py-1.5 rounded-full border border-rose-500/20 flex items-center gap-2">
-               <span className="material-symbols-outlined text-sm">wifi_off</span>
-               Offline Mode
+             <span className="text-[10px] md:text-xs font-bold text-rose-400 bg-rose-500/10 px-2 md:px-3 py-1 md:py-1.5 rounded-full border border-rose-500/20 flex items-center gap-1.5 md:gap-2">
+               <span className="material-symbols-outlined text-xs md:text-sm">wifi_off</span>
+               Offline
              </span>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3 w-full md:w-auto">
           <input type="text" placeholder="Pesquisar item..." value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="bg-background-dark border border-border-dark rounded-xl pl-6 pr-4 py-2.5 text-xs w-64 focus:ring-1 focus:ring-primary text-white outline-none" />
+            className="flex-1 md:flex-none bg-background-dark border border-border-dark rounded-xl px-4 py-2.5 text-xs focus:ring-1 md:w-64 focus:ring-primary text-white outline-none" />
           <button onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 bg-white text-black px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all shadow-lg">
+            className="flex items-center gap-2 bg-white text-black px-4 md:px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all shadow-lg shrink-0">
             <span className="material-symbols-outlined text-sm">add</span>
-            Adicionar
+            <span className="hidden md:inline">Adicionar</span>
           </button>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         {/* Sidebar categorias */}
-        <aside className="w-56 border-r border-border-dark bg-background-dark/30 overflow-y-auto custom-scrollbar p-6 shrink-0">
-          <nav className="space-y-1">
+        <aside className="w-full md:w-56 border-b md:border-b-0 md:border-r border-border-dark bg-background-dark/30 md:overflow-y-auto overflow-x-auto custom-scrollbar p-2 md:p-6 shrink-0 flex md:block scroll-smooth">
+          <nav className="flex md:flex-col gap-2 md:gap-1 w-max md:w-full px-2 md:px-0">
             {subCategories.map(cat => (
               <button key={cat} onClick={() => setActiveSubCategory(cat)}
-                className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeSubCategory === cat ? 'bg-primary/10 text-primary' : 'text-slate-400 hover:bg-white/5'
+                className={`whitespace-nowrap w-auto md:w-full text-left px-4 py-2.5 md:py-3 rounded-xl text-xs font-bold transition-all ${activeSubCategory === cat ? 'bg-primary/10 text-primary' : 'text-slate-400 hover:bg-white/5'
                   }`}>
                 {cat}
               </button>
@@ -146,7 +147,7 @@ const MenuView: React.FC = () => {
         </aside>
 
         {/* Grade do cardápio */}
-        <main className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-[radial-gradient(circle_at_top_right,_#1a1f26_0%,_#0d1117_100%)]">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar bg-[radial-gradient(circle_at_top_right,_#1a1f26_0%,_#0d1117_100%)] pb-24 md:pb-8">
           {isLoading ? (
              // Skeleton Loader
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
@@ -313,23 +314,23 @@ const AddItemModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/90 backdrop-blur-md p-6">
-      <div className="bg-card-dark border border-border-dark w-full max-w-2xl rounded-[3rem] p-10 animate-in zoom-in-95">
-        <h3 className="text-3xl font-black italic uppercase mb-8">Novo Item no Cardápio</h3>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <input required className="w-full bg-background-dark border border-border-dark rounded-2xl p-4 text-white" placeholder="Nome do Prato" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
-          <div className="grid grid-cols-2 gap-4">
-            <select className="bg-background-dark border border-border-dark rounded-2xl p-4 text-white appearance-none" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 md:p-6 pb-20 md:pb-6">
+      <div className="bg-card-dark border border-border-dark w-full max-w-2xl rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <h3 className="text-2xl md:text-3xl font-black italic uppercase mb-6 md:mb-8">Novo Item no Cardápio</h3>
+        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
+          <input required className="w-full bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white" placeholder="Nome do Prato" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <select className="bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white appearance-none" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
               {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
               <option value="Nova Categoria">Nova Categoria...</option>
             </select>
-            <input required className="bg-background-dark border border-border-dark rounded-2xl p-4 text-white" placeholder="Preço" type="number" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} />
+            <input required className="bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white" placeholder="Preço" type="number" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} />
           </div>
-          <input className="w-full bg-background-dark border border-border-dark rounded-2xl p-4 text-white" placeholder="URL da Imagem" value={formData.image} onChange={e => setFormData({ ...formData, image: e.target.value })} />
-          <textarea required className="w-full bg-background-dark border border-border-dark rounded-2xl p-4 text-white h-32" placeholder="Descrição" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
-          <div className="flex gap-4">
-            <button type="button" onClick={onClose} className="flex-1 py-4 bg-white/5 rounded-2xl font-black uppercase tracking-widest">Cancelar</button>
-            <button type="submit" className="flex-1 py-4 bg-primary rounded-2xl font-black uppercase tracking-widest text-white shadow-xl shadow-primary/20">Salvar Item</button>
+          <input className="w-full bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white" placeholder="URL da Imagem" value={formData.image} onChange={e => setFormData({ ...formData, image: e.target.value })} />
+          <textarea required className="w-full bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white h-24 md:h-32 resize-none" placeholder="Descrição" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+          <div className="flex gap-4 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-3 md:py-4 bg-white/5 rounded-2xl font-black uppercase tracking-widest text-xs md:text-sm">Cancelar</button>
+            <button type="submit" className="flex-1 py-3 md:py-4 bg-primary rounded-2xl font-black uppercase tracking-widest text-white shadow-xl shadow-primary/20 text-xs md:text-sm">Salvar</button>
           </div>
         </form>
       </div>
@@ -405,66 +406,73 @@ const RecipeViewerModal: React.FC<{
         : 'text-rose-400';
 
   return (
-    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/95 backdrop-blur-xl p-6 animate-in fade-in duration-300">
-      <div className="bg-[#12161b] border border-white/10 rounded-[3rem] w-full max-w-5xl h-[90vh] flex overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500">
+    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 md:p-6 pb-20 md:pb-6 animate-in fade-in duration-300">
+      <div className="bg-[#12161b] border border-white/10 rounded-[2rem] md:rounded-[3rem] w-full max-w-5xl h-[85vh] md:h-[90vh] flex flex-col md:flex-row overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500">
 
         {/* Esquerdo: imagem + métricas */}
-        <div className="w-2/5 relative bg-black/50 overflow-hidden shrink-0 flex flex-col">
+        <div className="w-full md:w-2/5 relative bg-black/50 overflow-hidden shrink-0 flex flex-col h-72 md:h-auto">
           <div className="relative flex-1">
             <img src={item.image} className="absolute inset-0 w-full h-full object-cover opacity-60" alt={item.name} />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#12161b] via-[#12161b]/80 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#12161b] via-[#12161b]/80 to-[#12161b]/10 md:to-transparent" />
 
-            <div className="absolute inset-0 p-8 flex flex-col justify-end">
-              <div className="flex gap-2 mb-3 flex-wrap">
-                <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-lg text-[10px] font-black uppercase tracking-widest text-white">{item.category}</span>
-                {item.spicy && <span className="px-3 py-1 bg-rose-500/20 text-rose-400 rounded-lg text-[10px] font-black uppercase">Apimentado</span>}
-                {item.vegan && <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-lg text-[10px] font-black uppercase">Vegano</span>}
+            <div className="absolute top-0 left-0 right-0 p-4 flex justify-end z-20 md:hidden">
+              <button onClick={onClose}
+                className="size-8 bg-black/50 border border-white/10 rounded-full flex items-center justify-center text-white backdrop-blur-md">
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+
+            <div className="absolute inset-0 p-5 md:p-8 flex flex-col justify-end z-10">
+              <div className="flex gap-2 mb-2 md:mb-3 flex-wrap">
+                <span className="px-2 md:px-3 py-1 bg-white/10 backdrop-blur-md rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white">{item.category}</span>
+                {item.spicy && <span className="px-2 md:px-3 py-1 bg-rose-500/20 text-rose-400 rounded-lg text-[9px] md:text-[10px] font-black uppercase">Apimentado</span>}
+                {item.vegan && <span className="px-2 md:px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-lg text-[9px] md:text-[10px] font-black uppercase">Vegano</span>}
               </div>
-              <h2 className="text-3xl font-black italic tracking-tighter text-white mb-1 leading-none">{item.name}</h2>
-              <p className="text-xs font-bold text-slate-400 italic mb-6">"{item.description}"</p>
+              <h2 className="text-2xl md:text-3xl font-black italic tracking-tighter text-white mb-1 leading-none drop-shadow-md">{item.name}</h2>
+              <p className="text-[10px] md:text-xs font-bold text-slate-300 italic mb-4 md:mb-6 line-clamp-2 drop-shadow-md">"{item.description}"</p>
 
               {/* Métricas: Tempo, Rendimento, Custo, CMV */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="p-3 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
-                  <p className="text-[9px] uppercase font-black tracking-widest text-slate-500">Preparo</p>
-                  <p className="text-lg font-black text-white flex items-center gap-1">
-                    <span className="material-symbols-outlined text-primary text-lg">timer</span>
-                    {(isEditing ? editRecipe.prepTime : recipe?.prepTime) || '--'} min
+              <div className="grid grid-cols-4 md:grid-cols-2 gap-2 mt-auto">
+                <div className="p-2 md:p-3 bg-white/5 backdrop-blur-md rounded-xl md:rounded-2xl border border-white/10 flex flex-col justify-center">
+                  <p className="text-[8px] md:text-[9px] uppercase font-black tracking-widest text-slate-400">Preparo</p>
+                  <p className="text-sm md:text-lg font-black text-white flex items-center gap-1">
+                    <span className="material-symbols-outlined text-primary text-sm md:text-lg hidden md:block">timer</span>
+                    {(isEditing ? editRecipe.prepTime : recipe?.prepTime) || '--'}m
                   </p>
                 </div>
-                <div className="p-3 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
-                  <p className="text-[9px] uppercase font-black tracking-widest text-slate-500">Rende</p>
-                  <p className="text-lg font-black text-white">
-                    {(isEditing ? editRecipe.yield : recipe?.yield) || 1} porção{((isEditing ? editRecipe.yield : recipe?.yield) || 1) > 1 ? 'ões' : ''}
+                <div className="p-2 md:p-3 bg-white/5 backdrop-blur-md rounded-xl md:rounded-2xl border border-white/10 flex flex-col justify-center">
+                  <p className="text-[8px] md:text-[9px] uppercase font-black tracking-widest text-slate-400">Rende</p>
+                  <p className="text-sm md:text-lg font-black text-white whitespace-nowrap">
+                    {(isEditing ? editRecipe.yield : recipe?.yield) || 1} {((isEditing ? editRecipe.yield : recipe?.yield) || 1) > 1 ? 'porç' : 'porç'}
                   </p>
                 </div>
                 {/* ✨ Custo e CMV% */}
-                <div className="p-3 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
-                  <p className="text-[9px] uppercase font-black tracking-widest text-slate-500">Custo/Porção</p>
-                  <p className="text-lg font-black text-white">
-                    R$ {itemCost > 0 ? itemCost.toFixed(2) : '--'}
+                <div className="p-2 md:p-3 bg-white/5 backdrop-blur-md rounded-xl md:rounded-2xl border border-white/10 flex flex-col justify-center">
+                  <p className="text-[8px] md:text-[9px] uppercase font-black tracking-widest text-slate-400">Custo</p>
+                  <p className="text-sm md:text-lg font-black text-white">
+                    R${itemCost > 0 ? itemCost.toFixed(1) : '--'}
                   </p>
                 </div>
-                <div className="p-3 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
-                  <p className="text-[9px] uppercase font-black tracking-widest text-slate-500">CMV</p>
-                  <p className={`text-lg font-black ${cmvColor}`}>
-                    {itemCMV > 0 ? `${itemCMV.toFixed(1)}%` : '--'}
+                <div className="p-2 md:p-3 bg-white/5 backdrop-blur-md rounded-xl md:rounded-2xl border border-white/10 flex flex-col justify-center">
+                  <p className="text-[8px] md:text-[9px] uppercase font-black tracking-widest text-slate-400">CMV</p>
+                  <p className={`text-sm md:text-lg font-black ${cmvColor}`}>
+                    {itemCMV > 0 ? `${itemCMV.toFixed(0)}%` : '--'}
                   </p>
                 </div>
               </div>
 
               {/* ✨ Escalonador de porções (só no modo visualização) */}
               {!isEditing && recipe && (
-                <div className="mt-4 p-3 bg-white/5 rounded-2xl border border-white/10">
-                  <p className="text-[9px] uppercase font-black tracking-widest text-slate-500 mb-2">Escalar para</p>
-                  <div className="flex items-center gap-3">
+                <div className="mt-3 md:mt-4 p-2 md:p-3 bg-white/5 rounded-xl md:rounded-2xl border border-white/10 flex items-center justify-between gap-3">
+                  <p className="text-[9px] uppercase font-black tracking-widest text-slate-400 md:mb-2 hidden md:block">Escalar para</p>
+                  <div className="flex items-center gap-3 w-full md:w-auto flex-1">
                     <button onClick={() => setPortions(p => Math.max(1, p - 1))}
-                      className="size-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg flex items-center justify-center text-white transition-all">
+                      className="size-7 md:size-8 bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg flex items-center justify-center text-white transition-all shrink-0">
                       <span className="material-symbols-outlined text-sm">remove</span>
                     </button>
-                    <span className="text-xl font-black text-white text-center flex-1">{portions} porç.</span>
+                    <span className="text-base md:text-xl font-black text-white text-center flex-1">{portions} porç.</span>
                     <button onClick={() => setPortions(p => p + 1)}
-                      className="size-8 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg flex items-center justify-center text-white transition-all">
+                      className="size-7 md:size-8 bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg flex items-center justify-center text-white transition-all shrink-0">
                       <span className="material-symbols-outlined text-sm">add</span>
                     </button>
                   </div>
@@ -475,9 +483,9 @@ const RecipeViewerModal: React.FC<{
         </div>
 
         {/* Direito: ingredientes + instruções */}
-        <div className="flex-1 flex flex-col bg-[#0a0d11]">
+        <div className="flex-1 flex flex-col bg-[#0a0d11] overflow-hidden">
           {/* Barra superior com actions */}
-          <div className="flex items-center justify-between px-8 py-5 border-b border-white/5 shrink-0">
+          <div className="flex items-center justify-between px-4 md:px-8 py-3 md:py-5 border-b border-white/5 shrink-0 flex-wrap gap-2 hidden md:flex">
             <h3 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2">
               <span className="material-symbols-outlined text-primary">menu_book</span>
               {isEditing ? 'Editando Receita' : 'Livro de Receitas'}
@@ -508,16 +516,45 @@ const RecipeViewerModal: React.FC<{
               </button>
             </div>
           </div>
+          
+          {/* Mobile bottom actions for recipe (so we can edit/cancel on small screens too) */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 shrink-0 flex-wrap gap-2 md:hidden">
+            <h3 className="text-xs font-black uppercase tracking-widest text-white flex items-center gap-1.5 flex-1 w-full shrink-0">
+              <span className="material-symbols-outlined text-primary text-sm">menu_book</span>
+              {isEditing ? 'Editando Receita' : 'Livro de Receitas'}
+            </h3>
+            <div className="flex items-center gap-2 w-full">
+              {isEditing ? (
+                <>
+                  <button onClick={() => { setIsEditing(false); setEditRecipe(recipe ?? { menuItemId: item.id, yield: 1, prepTime: 0, prepSteps: [], items: [] }); }}
+                    className="flex-1 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-black text-slate-400 transition-all">
+                    Cancelar
+                  </button>
+                  <button onClick={handleSave}
+                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-black text-white transition-all flex items-center justify-center gap-1">
+                    <span className="material-symbols-outlined text-sm">save</span>
+                    Salvar
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setIsEditing(true)}
+                  className="w-full py-2 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 rounded-xl text-xs font-black text-indigo-400 transition-all flex items-center justify-center gap-1">
+                  <span className="material-symbols-outlined text-sm">edit</span>
+                  Editar Modo
+                </button>
+              )}
+            </div>
+          </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-8 space-y-8">
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 space-y-8">
 
             {/* ── INSUMOS ─────────────────────────────── */}
             <section>
-              <h4 className="text-sm font-black uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined">kitchen</span>
+              <h4 className="text-xs md:text-sm font-black uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg">kitchen</span>
                 Insumos Necessários
                 {!isEditing && recipe && portions !== recipe.yield && (
-                  <span className="ml-2 px-2 py-0.5 bg-primary/10 border border-primary/30 rounded-lg text-[9px] font-black text-primary">
+                  <span className="ml-1 md:ml-2 px-1.5 md:px-2 py-0.5 bg-primary/10 border border-primary/30 rounded-lg text-[9px] font-black text-primary">
                     ×{multiplier.toFixed(2)} escala
                   </span>
                 )}

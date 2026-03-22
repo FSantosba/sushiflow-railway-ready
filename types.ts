@@ -72,6 +72,9 @@ export interface Order {
   total?: number; // Kanban mock
   time?: string; // Kanban mock
   address?: string; // Kanban mock
+  deliveryMan?: string; // Driver app mock — stores driverKey
+  notes?: string; // Order notes / obs
+  clientePhone?: string; // Phone for WhatsApp contact
 }
 
 // ─── Tracking (Logística Real-Time) ──────────────────────────────────────────

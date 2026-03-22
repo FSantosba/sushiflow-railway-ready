@@ -10,6 +10,7 @@ const CustomerTrackingView: React.FC = () => {
     const { orders } = useOrders();
     const [trackingCode, setTrackingCode] = useState('');
     const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
+    const [searchError, setSearchError] = useState('');
 
     // -- Tracking States --
     const [motoboyPos, setMotoboyPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -137,25 +138,42 @@ const CustomerTrackingView: React.FC = () => {
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        const found = orders.find(o => o.id === trackingCode);
-        if (found) setTrackedOrder(found);
-        else alert('Pedido não encontrado!');
+        setSearchError('');
+        const found = orders.find(o => o.id === trackingCode.trim());
+        if (found) {
+            setTrackedOrder(found);
+        } else {
+            setSearchError('Pedido não encontrado. Verifique o código e tente novamente.');
+        }
     };
 
     if (!trackedOrder) {
         return (
-            <div className="h-full w-full flex items-center justify-center bg-[#0d1117]">
-                <form onSubmit={handleSearch} className="bg-card-dark p-8 rounded-3xl border border-white/5 w-full max-w-sm text-center">
-                    <span className="material-symbols-outlined text-4xl text-primary mb-4">local_shipping</span>
-                    <h2 className="text-white font-black italic text-xl mb-6">Rastrear Pedido</h2>
+            <div className="h-full w-full flex items-center justify-center bg-[#0d1117] px-6">
+                <form onSubmit={handleSearch} className="bg-[#12161b] p-8 rounded-3xl border border-white/5 w-full max-w-sm text-center shadow-2xl">
+                    <div className="size-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <span className="material-symbols-outlined text-4xl text-primary">local_shipping</span>
+                    </div>
+                    <h2 className="text-white font-black italic text-xl mb-2">Rastrear Pedido</h2>
+                    <p className="text-slate-500 text-xs font-bold mb-6">Informe o código recebido no WhatsApp</p>
                     <input
                         type="text"
-                        placeholder="Código do Pedido"
+                        placeholder="Ex: 2048"
                         value={trackingCode}
-                        onChange={e => setTrackingCode(e.target.value)}
-                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white text-center font-mono focus:border-primary outline-none mb-4"
+                        onChange={e => { setTrackingCode(e.target.value); setSearchError(''); }}
+                        className={`w-full bg-black/50 border rounded-xl px-4 py-3 text-white text-center font-mono outline-none mb-1 transition-colors ${
+                            searchError ? 'border-rose-500/60 focus:border-rose-500' : 'border-white/10 focus:border-primary'
+                        }`}
                     />
-                    <button type="submit" className="w-full bg-primary text-white font-black uppercase py-4 rounded-xl shadow-[0_10px_30px_rgba(230,99,55,0.3)]">
+                    {/* ✅ FIX: erro inline em vez de alert() */}
+                    {searchError && (
+                        <div className="flex items-center justify-center gap-2 text-rose-400 text-xs font-bold mb-4 mt-2">
+                            <span className="material-symbols-outlined text-sm">error</span>
+                            {searchError}
+                        </div>
+                    )}
+                    {!searchError && <div className="mb-4" />}
+                    <button type="submit" className="w-full bg-primary text-white font-black uppercase py-4 rounded-xl shadow-[0_10px_30px_rgba(230,99,55,0.3)] hover:scale-[1.02] transition-transform">
                         Acompanhar
                     </button>
                 </form>
@@ -166,7 +184,7 @@ const CustomerTrackingView: React.FC = () => {
     // Calcula o progresso / etapa ativa
     const getStep = (status: OrderStatus) => {
         switch (status) {
-            case OrderStatus.PENDENTE:
+            case OrderStatus.PENDING:
             case OrderStatus.PAGO: return 1;
             case OrderStatus.EM_PREPARO: return 2;
             case OrderStatus.EM_ROTA: return 3;

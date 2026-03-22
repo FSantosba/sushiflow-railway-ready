@@ -12,6 +12,7 @@ import FinanceDashboard from './views/admin/FinanceDashboard';
 import KitchenKDS from './views/shared/KitchenKDS';
 import TableMap from './views/waiter/TableMap';
 import InventoryControl from './views/shared/InventoryControl';
+import PurchasingDashboard from './views/shared/PurchasingDashboard';
 import MenuView from './views/shared/MenuView';
 import PDVView from './views/payment/PDVView';
 import PrinterSettings from './views/shared/PrinterSettings';
@@ -25,6 +26,7 @@ import LoginView from './views/shared/LoginView';
 import DeliveryAppView from './views/delivery/DeliveryAppView';
 import DriverAppView from './views/driver/DriverAppView';
 import AdminDashboardView from './views/admin/AdminDashboardView';
+import DeliveryManagerView from './views/delivery/DeliveryManagerView';
 
 const AppContent: React.FC = () => {
   const { currentUser } = useAuth();
@@ -57,12 +59,14 @@ const AppContent: React.FC = () => {
       case 'mesas': return <TableMap />;
       case 'reservas': return <ReservationView />;
       case 'estoque': return <InventoryControl />;
+      case 'compras': return <PurchasingDashboard />;
       case 'cardapio': return <MenuView />;
       case 'impressao': return <PrinterSettings />;
       case 'equipe': return <TeamManagement />;
       case 'cmv': return <CMVView />;
       case 'garcom': return <WaiterView />;
       case 'delivery_app': return <DeliveryAppView />;
+      case 'delivery_manager': return <DeliveryManagerView />;
       case 'driver_app': return <DriverAppView />;
       default: return <DashboardView />;
     }
@@ -89,18 +93,22 @@ const AppContent: React.FC = () => {
   );
 };
 
+import { MenuProvider } from './context/MenuContext';
+
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <OrdersProvider>
-        <ReservationProvider>
-          <TableProvider>
-            <CMVProvider>
-              <AppContent />
-            </CMVProvider>
-          </TableProvider>
-        </ReservationProvider>
-      </OrdersProvider>
+      <MenuProvider>
+        <OrdersProvider>
+          <ReservationProvider>
+            <TableProvider>
+              <CMVProvider>
+                <AppContent />
+              </CMVProvider>
+            </TableProvider>
+          </ReservationProvider>
+        </OrdersProvider>
+      </MenuProvider>
     </AuthProvider>
   );
 };

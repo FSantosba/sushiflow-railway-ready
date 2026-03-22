@@ -9,6 +9,8 @@ const LogisticsKanban: React.FC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [autoPrint, setAutoPrint] = useState(false);
 
+  const [activeMobileTab, setActiveMobileTab] = useState<OrderStatus>(OrderStatus.NEW);
+
   const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
   const [toasts, setToasts] = useState<{ id: string, customer: string, orderId: string }[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -162,10 +164,10 @@ const LogisticsKanban: React.FC = () => {
       </div>
 
       {/* Toolbar com Busca Refinada */}
-      <div className="p-4 border-b border-white/5 bg-[#11161d] shrink-0 z-20">
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
+      <div className="p-3 md:p-4 border-b border-white/5 bg-[#11161d] shrink-0 z-20">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 xl:gap-4">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
+            <div className="flex bg-black/40 p-1 rounded-xl border border-white/5 overflow-x-auto no-scrollbar">
               {['Todas', 'iFood', 'UberEats', 'Direto'].map((plt) => (
                 <button
                   key={plt}
@@ -202,7 +204,7 @@ const LogisticsKanban: React.FC = () => {
           </div>
 
           {/* NOVO CAMPO DE BUSCA APRIMORADO */}
-          <div className="relative group">
+          <div className="relative group w-full xl:w-auto">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm group-focus-within:text-primary transition-colors">search</span>
             <input
               type="text"
@@ -223,13 +225,43 @@ const LogisticsKanban: React.FC = () => {
         </div>
       </div>
 
+      {/* Mobile Tabs */}
+      <div className="md:hidden flex overflow-x-auto no-scrollbar border-b border-white/5 bg-[#0a0e14] shrink-0">
+        {columns.map((col) => {
+          const count = filteredOrders.filter(o => o.status === col.status).length;
+          const isActive = activeMobileTab === col.status;
+          return (
+            <button
+              key={col.status}
+              onClick={() => setActiveMobileTab(col.status)}
+              className={`flex-1 min-w-[120px] px-3 py-3 text-[10px] sm:text-[11px] font-black uppercase tracking-wider whitespace-nowrap border-b-2 transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${
+                isActive
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-transparent text-slate-500 hover:text-slate-300 hover:bg-white/[0.02]'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm">{col.icon}</span>
+                <span>{col.label}</span>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isActive ? 'bg-primary text-white' : 'bg-white/5'}`}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Kanban Board */}
-      <div className="flex-1 overflow-x-auto p-4 md:p-6 flex gap-4 md:gap-6 custom-scrollbar snap-x snap-mandatory">
+      <div className="flex-1 overflow-y-auto md:overflow-x-auto p-3 md:p-6 flex flex-col md:flex-row gap-4 md:gap-6 custom-scrollbar md:snap-x md:snap-mandatory">
         {columns.map((col) => {
           const colOrders = filteredOrders.filter(o => o.status === col.status);
+          const isMobileActive = activeMobileTab === col.status;
+
           return (
-            <div key={col.status} className="w-[85vw] md:w-[340px] flex flex-col gap-4 shrink-0 snap-center">
-              <div className="flex items-center justify-between px-2">
+            <div 
+              key={col.status} 
+              className={`w-full md:w-[340px] flex-col gap-4 shrink-0 md:snap-center ${isMobileActive ? 'flex' : 'hidden'} md:flex`}
+            >
+              <div className="hidden md:flex items-center justify-between px-2">
                 <div className="flex items-center gap-2">
                   <span className={`text-[10px] font-black uppercase tracking-[0.25em] ${col.status === OrderStatus.PENDING ? 'text-rose-500' :
                     col.status === OrderStatus.PREPARING ? 'text-primary' :
@@ -243,7 +275,7 @@ const LogisticsKanban: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-4 flex-1 overflow-y-auto custom-scrollbar pr-2 pb-10">
+              <div className="flex flex-col gap-3 md:gap-4 flex-1 md:overflow-y-auto custom-scrollbar md:pr-2 pb-4 md:pb-10">
                 {colOrders.map(order => (
                   <div
                     key={order.id}
@@ -266,11 +298,11 @@ const LogisticsKanban: React.FC = () => {
                       </div>
                     </div>
 
-                    <h4 className="text-lg font-black text-white leading-tight mb-4 group-hover:text-primary transition-colors truncate">
+                    <h4 className="text-base sm:text-lg font-black text-white leading-tight mb-4 group-hover:text-primary transition-colors truncate">
                       {order.customer || 'Cliente'}
                     </h4>
 
-                    <div className="space-y-2 mb-6">
+                    <div className="space-y-1 sm:space-y-2 mb-4 sm:mb-6">
                       {order.items && order.items.slice(0, 3).map((itemStr, i) => {
                         const { qty, name } = parseItem(itemStr);
                         return (
@@ -326,27 +358,27 @@ const LogisticsKanban: React.FC = () => {
 
       {/* Modal Detalhes */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-6 animate-in fade-in duration-300" onClick={() => setSelectedOrder(null)}>
-          <div className="bg-[#12161b] border border-white/10 rounded-[2.5rem] w-full max-w-4xl p-8 shadow-2xl animate-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-3xl font-black italic uppercase tracking-tighter">Pedido #{selectedOrder.id}</h2>
-              <button onClick={() => setSelectedOrder(null)} className="size-10 bg-white/5 rounded-xl flex items-center justify-center text-slate-500 hover:text-white">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-3 md:p-6 animate-in fade-in duration-300" onClick={() => setSelectedOrder(null)}>
+          <div className="bg-[#12161b] border border-white/10 rounded-3xl md:rounded-[2.5rem] w-full max-w-4xl p-5 md:p-8 shadow-2xl animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6 md:mb-8 sticky top-0 bg-[#12161b] pt-2 pb-4 z-10 border-b border-white/5">
+              <h2 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter">Pedido #{selectedOrder.id}</h2>
+              <button onClick={() => setSelectedOrder(null)} className="size-8 md:size-10 bg-white/5 rounded-xl flex items-center justify-center text-slate-500 hover:text-white">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <p className="text-xl font-bold text-white mb-4">{selectedOrder.customer || 'Cliente'}</p>
-            <div className="space-y-4 mb-8">
+            <p className="text-lg md:text-xl font-bold text-white mb-4">{selectedOrder.customer || 'Cliente'}</p>
+            <div className="space-y-3 md:space-y-4 mb-6 md:mb-8">
               {selectedOrder.items?.map((item, idx) => (
-                <div key={idx} className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
+                <div key={idx} className="p-3 md:p-4 bg-white/[0.03] border border-white/5 rounded-2xl flex items-center">
                   {item}
                 </div>
               ))}
             </div>
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 md:gap-4 sticky bottom-0 bg-[#12161b] pt-4 pb-2 z-10 border-t border-white/5">
               {selectedOrder.status !== OrderStatus.COMPLETED && (
                 <button 
                   onClick={() => handleAdvanceStatus(selectedOrder)}
-                  className="flex-1 py-4 bg-primary hover:bg-primary/90 transition-colors text-white font-black text-sm uppercase rounded-2xl shadow-xl shadow-primary/20">
+                  className="w-full sm:flex-1 py-3 md:py-4 bg-primary hover:bg-primary/90 transition-colors text-white font-black text-xs md:text-sm uppercase rounded-xl md:rounded-2xl shadow-xl shadow-primary/20">
                   {getNextStatusLabel(selectedOrder.status)}
                 </button>
               )}
@@ -355,7 +387,7 @@ const LogisticsKanban: React.FC = () => {
                   setToasts(prev => [...prev, { id: Math.random().toString(), customer: 'Imprimindo...', orderId: selectedOrder.id }]);
                   setTimeout(() => setSelectedOrder(null), 1000);
                 }}
-                className="flex-1 py-4 bg-white/5 hover:bg-white/10 transition-colors text-white font-black text-sm uppercase rounded-2xl border border-white/10">
+                className="w-full sm:flex-1 py-3 md:py-4 bg-white/5 hover:bg-white/10 transition-colors text-white font-black text-xs md:text-sm uppercase rounded-xl md:rounded-2xl border border-white/10">
                 Imprimir Comanda
               </button>
             </div>

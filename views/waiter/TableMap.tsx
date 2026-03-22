@@ -22,7 +22,6 @@ const DEFAULT_POSITIONS: TablePosition[] = [
   { id: 'VIP 1', x: 320, y: 440 },
 ];
 
-// Ícone e label por status
 const STATUS_META: Record<TableStatus, { icon: string; label: string }> = {
   [TableStatus.OCCUPIED]: { icon: 'groups', label: 'OCUPADA' },
   [TableStatus.FREE]: { icon: 'check_circle', label: 'LIVRE' },
@@ -30,7 +29,6 @@ const STATUS_META: Record<TableStatus, { icon: string; label: string }> = {
   [TableStatus.CLEANING]: { icon: 'cleaning_services', label: 'LIMPANDO' },
 };
 
-// Sufixo de área para IDs
 const AREA_PREFIX: Record<AreaTab, string> = {
   main: '',
   vip: 'VIP ',
@@ -46,11 +44,30 @@ const TableMap: React.FC = () => {
   const [newCapacity, setNewCapacity] = useState(4);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
-  // Cronômetro vivo
+  // Controle de Visualização (Mapa vs Grade no Mobile)
+  const [isMobileView, setIsMobileView] = useState(window.innerWidth < 1024);
+  const [viewMode, setViewMode] = useState<'map' | 'grid'>(window.innerWidth < 1024 ? 'grid' : 'map');
+
+  // Cronômetro vivo - Atualiza a cada segundo
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobileView(mobile);
+      if (mobile && viewMode === 'map') setViewMode('grid');
+    };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [viewMode]);
+
+  const handleRemoveTable = (id: string) => {
+    removeTable(id);
+    setConfirmRemove(null);
+    setSelectedTableId(null);
+  };
 
   const formatElapsed = (ms: number) => {
     const totalSecs = Math.floor(ms / 1000);
@@ -76,14 +93,14 @@ const TableMap: React.FC = () => {
     return saved ? JSON.parse(saved) : DEFAULT_POSITIONS;
   });
 
-  // Quando uma nova mesa é criada, adiciona posição inicial dentro da área visível
+  // Posicionamento automático para novas mesas
   useEffect(() => {
     const missing = tables.filter(t => !positions.find(p => p.id === t.id));
     if (missing.length === 0) return;
     const newPositions = missing.map((t, i) => ({
       id: t.id,
-      x: 80 + (i * 180) % 560,
-      y: 150 + Math.floor((i * 180) / 560) * 160,
+      x: 80 + (i * 180) % 600,
+      y: 150 + Math.floor((i * 180) / 600) * 160,
     }));
     setPositions(prev => {
       const updated = [...prev, ...newPositions];
@@ -91,11 +108,11 @@ const TableMap: React.FC = () => {
       return updated;
     });
   }, [tables.length]);
+
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Filtra mesas pela aba ativa
   const areaTables = tables.filter(t => {
     if (activeArea === 'main') return !t.id.startsWith('VIP ') && !t.id.startsWith('EXT ');
     if (activeArea === 'vip') return t.id.startsWith('VIP ');
@@ -113,37 +130,31 @@ const TableMap: React.FC = () => {
 
   const getPos = (id: string) => positions.find(p => p.id === id) || { id, x: 50, y: 50 };
 
-  const handleMouseDown = (e: React.MouseEvent, tableId: string) => {
-    e.preventDefault();
+  const handleDragStart = (clientX: number, clientY: number, tableId: string) => {
     const pos = getPos(tableId);
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     setDraggingId(tableId);
     setDragOffset({
-      x: e.clientX - rect.left - pos.x,
-      y: e.clientY - rect.top - pos.y
+      x: clientX - rect.left - pos.x,
+      y: clientY - rect.top - pos.y
     });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleDragMove = (clientX: number, clientY: number) => {
     if (!draggingId || !canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    const newX = Math.max(10, Math.min(rect.width - 110, e.clientX - rect.left - dragOffset.x));
-    const newY = Math.max(10, Math.min(rect.height - 120, e.clientY - rect.top - dragOffset.y));
+    const newX = Math.max(10, Math.min(rect.width - 110, clientX - rect.left - dragOffset.x));
+    const newY = Math.max(10, Math.min(rect.height - 120, clientY - rect.top - dragOffset.y));
     const updated = positions.map(p => p.id === draggingId ? { ...p, x: newX, y: newY } : p);
     setPositions(updated);
   };
 
-  const handleMouseUp = () => {
+  const handleDragEnd = () => {
     if (draggingId) {
       localStorage.setItem('@sushiflow:tablePositions', JSON.stringify(positions));
       setDraggingId(null);
     }
-  };
-
-  const handleTableClick = (tableId: string) => {
-    if (draggingId) return;
-    setSelectedTableId(tableId === selectedTableId ? null : tableId);
   };
 
   const getTableColors = (status: TableStatus) => {
@@ -155,27 +166,10 @@ const TableMap: React.FC = () => {
     }
   };
 
-  const resetPositions = () => {
-    setPositions(DEFAULT_POSITIONS);
-    localStorage.removeItem('@sushiflow:tablePositions');
-  };
-
-  const handleAddTable = () => {
-    addTable(newCapacity, activeArea);
-    setShowAddModal(false);
-    setNewCapacity(4);
-  };
-
-  const handleRemoveTable = (tableId: string) => {
-    removeTable(tableId);
-    if (selectedTableId === tableId) setSelectedTableId(null);
-    setConfirmRemove(null);
-  };
-
   const getItemStatusBadge = (status: string) => {
     switch (status) {
       case 'READY': return { label: '✓ Pronto', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' };
-      case 'PENDING': return { label: '🍳 Na cozinha', cls: 'bg-amber-400/20 text-amber-400 border-amber-400/30' };
+      case 'PENDING': return { label: '🍳 Cozinha', cls: 'bg-amber-400/20 text-amber-400 border-amber-400/30' };
       case 'DRAFT': return { label: '📝 Rascunho', cls: 'bg-slate-500/20 text-slate-400 border-slate-500/30' };
       default: return { label: '✓ Servido', cls: 'bg-slate-600/20 text-slate-500 border-slate-600/30' };
     }
@@ -183,283 +177,313 @@ const TableMap: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col bg-[#080c10] overflow-hidden">
-      {/* Toolbar */}
-      <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between shrink-0 bg-[#0d1118]">
-        {/* Tabs de Area */}
-        <div className="flex bg-black/40 p-1 rounded-xl border border-white/10 gap-1">
+
+      {/* TOOLBAR SUPERIOR (RESPONSIVA) */}
+      <header className="px-4 md:px-6 py-3 border-b border-white/5 flex flex-col md:flex-row items-center justify-between shrink-0 bg-[#0d1118] gap-4">
+        <div className="flex bg-black/40 p-1 rounded-xl border border-white/10 gap-1 w-full md:w-auto overflow-x-auto no-scrollbar">
           {([
-            { id: 'main', label: 'Salão Principal' },
-            { id: 'vip', label: 'VIP / Tatame' },
+            { id: 'main', label: 'Salão' },
+            { id: 'vip', label: 'VIP' },
             { id: 'external', label: 'Externo' },
-          ] as { id: AreaTab; label: string }[]).map(tab => (
+          ] as const).map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveArea(tab.id)}
-              className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeArea === tab.id ? 'bg-white text-black' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeArea === tab.id ? 'bg-white text-black shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
             >
               {tab.label}
             </button>
           ))}
         </div>
 
-        {/* Métricas, Adicionar e Reset */}
-        <div className="flex items-center gap-4">
-          {/* Progress bar de ocupação */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="size-2 rounded-full bg-rose-500" />
-              <span className="text-[10px] font-bold text-slate-500 uppercase">{ocupadas} Ocupadas</span>
+        <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex flex-col gap-1 min-w-[100px]">
+              <div className="flex items-center justify-between text-[9px] font-black uppercase text-slate-500">
+                <span>Ocupação</span>
+                <span className={ocupacaoRate > 80 ? 'text-rose-500' : 'text-emerald-500'}>{ocupacaoRate}%</span>
+              </div>
+              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden"><div className={`h-full transition-all duration-1000 ${ocupacaoRate > 80 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${ocupacaoRate}%` }} /></div>
             </div>
             <div className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
+              <span className="text-[10px] font-black text-slate-500 uppercase">{ocupadas}</span>
               <span className="size-2 rounded-full bg-emerald-500" />
-              <span className="text-[10px] font-bold text-slate-500 uppercase">{livres} Livres</span>
-            </div>
-            <div className="flex flex-col gap-1 min-w-[80px]">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] font-bold text-slate-600 uppercase">Ocupação</span>
-                <span className={`text-[11px] font-black ${ocupacaoRate > 80 ? 'text-rose-500' : ocupacaoRate > 50 ? 'text-amber-400' : 'text-emerald-500'}`}>
-                  {ocupacaoRate}%
-                </span>
-              </div>
-              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden w-20">
-                <div
-                  className={`h-full rounded-full transition-all duration-700 ${ocupacaoRate > 80 ? 'bg-rose-500' : ocupacaoRate > 50 ? 'bg-amber-400' : 'bg-emerald-500'}`}
-                  style={{ width: `${ocupacaoRate}%` }}
-                />
-              </div>
+              <span className="text-[10px] font-black text-slate-500 uppercase">{livres}</span>
             </div>
           </div>
 
-          {/* Botão Adicionar Mesa */}
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 border border-primary/30 rounded-lg text-[10px] font-black text-primary hover:bg-primary/20 uppercase tracking-widest transition-all"
+          <div className="flex items-center gap-2">
+            <div className="bg-black/40 p-1 rounded-xl border border-white/10 flex">
+              <button onClick={() => setViewMode('map')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'map' ? 'bg-white text-black shadow-sm' : 'text-slate-400 hover:text-white'}`}>Mapa</button>
+              <button onClick={() => setViewMode('grid')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'grid' ? 'bg-white text-black shadow-sm' : 'text-slate-400 hover:text-white'}`}>Grade</button>
+            </div>
+            
+            <button onClick={() => setShowAddModal(true)} className="size-10 md:w-auto md:px-4 bg-indigo-600 text-white rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95 transition-all">
+              <span className="material-symbols-outlined text-xl md:text-sm">add_circle</span>
+              <span className="hidden md:block text-[10px] font-black uppercase tracking-widest">Nova Mesa</span>
+            </button>
+            
+            {viewMode === 'map' && (
+              <button onClick={() => { setPositions(DEFAULT_POSITIONS); localStorage.removeItem('@sushiflow:tablePositions'); }} className="size-10 bg-white/5 text-slate-500 rounded-xl flex items-center justify-center hover:text-white transition-all">
+                <span className="material-symbols-outlined text-xl">restart_alt</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+
+        {/* CONTEÚDO PRINCIPAL: MAPA OU GRADE */}
+        {viewMode === 'map' ? (
+          <div
+            ref={canvasRef}
+            className="flex-1 relative overflow-hidden bg-[radial-gradient(circle,_#1e3540_1px,_transparent_1px)] [background-size:32px_32px]"
+            onMouseMove={(e) => handleDragMove(e.clientX, e.clientY)}
+            onTouchMove={(e) => handleDragMove(e.touches[0].clientX, e.touches[0].clientY)}
+            onMouseUp={handleDragEnd}
+            onTouchEnd={handleDragEnd}
+            onMouseLeave={handleDragEnd}
           >
-            <span className="material-symbols-outlined text-sm">add_circle</span>
-            Nova Mesa
-          </button>
-
-          <button onClick={resetPositions} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[10px] font-black text-slate-500 hover:text-slate-300 uppercase tracking-widest transition-all">
-            <span className="material-symbols-outlined text-sm">restart_alt</span>
-            Resetar
-          </button>
-          <span className="text-[10px] text-slate-600 font-bold italic hidden xl:block">Arraste as mesas para reorganizar</span>
-        </div>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden">
-        {/* Canvas Principal — drag & drop */}
-        <div
-          ref={canvasRef}
-          className="flex-1 relative overflow-hidden bg-[radial-gradient(circle,_#1e3540_1px,_transparent_1px)] [background-size:28px_28px]"
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
-          {/* Balcão Sushi */}
-          <div className="absolute top-0 left-0 right-0 h-14 border-b-2 border-dashed border-amber-400/20 bg-amber-400/5 flex items-center justify-center">
-            <span className="text-[10px] font-black text-amber-400/50 uppercase tracking-widest">Balcão de Sushi</span>
-          </div>
-
-          {/* Entrada */}
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-10 border-t-2 border-dashed border-emerald-500/30 bg-emerald-500/5 flex items-center justify-center">
-            <span className="text-[9px] font-black text-emerald-500/40 uppercase tracking-widest">Entrada</span>
-          </div>
-
-          {/* Estado vazio para VIP / Externo */}
-          {areaTables.length === 0 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none">
-              <span className="material-symbols-outlined text-5xl text-slate-700">table_restaurant</span>
-              <p className="text-slate-600 font-bold text-sm">Nenhuma mesa nesta área</p>
-              <p className="text-slate-700 text-xs">Clique em "Nova Mesa" para adicionar</p>
+            {/* Elementos Fixos do Mapa */}
+            <div className="absolute top-0 left-0 right-0 h-16 border-b-2 border-dashed border-amber-400/10 bg-amber-400/[0.02] flex items-center justify-center pointer-events-none">
+              <span className="text-[10px] font-black text-amber-400/30 uppercase tracking-[0.5em]">Balcão de Sushi / Preparo</span>
             </div>
-          )}
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-48 h-12 border-t-2 border-dashed border-emerald-500/20 bg-emerald-500/[0.02] flex items-center justify-center pointer-events-none">
+              <span className="text-[10px] font-black text-emerald-500/30 uppercase tracking-[0.5em]">Entrada</span>
+            </div>
 
-          {/* Mesas */}
-          {areaTables.map(table => {
-            const pos = getPos(table.id);
-            const colors = getTableColors(table.status);
-            const cart = openTables[table.id] || [];
-            const total = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
-            const isSelected = selectedTableId === table.id;
-            const isDragging = draggingId === table.id;
-            const hasReady = cart.some(i => i.status === 'READY');
-            const meta = STATUS_META[table.status];
+            {areaTables.map(table => {
+              const pos = getPos(table.id);
+              const colors = getTableColors(table.status);
+              const cart = openTables[table.id] || [];
+              const total = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
+              const timer = getTableTimer(table.id);
+              const isSelected = selectedTableId === table.id;
+              const hasReady = cart.some(i => i.status === 'READY');
 
-            return (
-              <div
-                key={table.id}
-                style={{ left: pos.x, top: pos.y, position: 'absolute' }}
-                className={`w-28 select-none transition-shadow ${isDragging ? 'z-50 cursor-grabbing' : 'cursor-grab z-10'}`}
-                onMouseDown={(e) => handleMouseDown(e, table.id)}
-                onClick={() => handleTableClick(table.id)}
-              >
-                {/* Ring pulsante quando tem item pronto */}
-                {hasReady && (
-                  <div className="absolute inset-0 rounded-2xl animate-ping opacity-30 ring-2 ring-emerald-400 pointer-events-none" />
-                )}
-                <div className={`relative border-2 rounded-2xl p-3 text-center transition-all ${colors.border} ${colors.bg} shadow-2xl ${colors.glow} ${isSelected ? `ring-2 ring-white/40 scale-110` : 'hover:scale-105'}`}>
-                  {hasReady && (
-                    <span className="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-emerald-500 border-2 border-[#080c10] animate-pulse flex items-center justify-center text-[8px] font-black text-white">!</span>
-                  )}
-                  {/* Ícone de status */}
-                  <span className={`material-symbols-outlined text-base mb-0.5 ${colors.text}`} style={{ fontSize: '16px' }}>{meta.icon}</span>
-                  {/* Cadeiras decorativas */}
-                  <div className="flex justify-center gap-2 mb-1">
-                    {Array.from({ length: Math.min(table.capacity, 4) }).map((_, i) => (
-                      <div key={i} className={`size-2 rounded-full border ${colors.border} opacity-40`} />
-                    ))}
+              return (
+                <div
+                  key={table.id}
+                  onMouseDown={(e) => handleDragStart(e.clientX, e.clientY, table.id)}
+                  onTouchStart={(e) => handleDragStart(e.touches[0].clientX, e.touches[0].clientY, table.id)}
+                  onClick={(e) => {
+                    if (draggingId !== table.id) {
+                      e.stopPropagation();
+                      setSelectedTableId(isSelected ? null : table.id);
+                    }
+                  }}
+                  className={`absolute group cursor-pointer transition-transform ${isSelected ? 'scale-110 z-20' : 'hover:scale-105 z-10'}`}
+                  style={{
+                    left: `${pos.x}px`,
+                    top: `${pos.y}px`,
+                    touchAction: 'none'
+                  }}
+                >
+                  <div className={`relative w-24 h-24 rounded-3xl border-2 flex flex-col items-center justify-center gap-1 transition-all shadow-2xl ${colors.border} ${colors.bg}`}>
+                    {hasReady && (
+                      <div className="absolute -inset-1 rounded-[2rem] animate-ping opacity-20 ring-4 ring-emerald-400 pointer-events-none" />
+                    )}
+                    {hasReady && (
+                      <div className="absolute -top-3 -right-3 size-8 bg-emerald-500 rounded-full border-4 border-[#080c10] flex items-center justify-center animate-bounce shadow-xl">
+                        <span className="material-symbols-outlined text-white text-[14px] font-black">notifications_active</span>
+                      </div>
+                    )}
+                    
+                    <span className={`material-symbols-outlined text-3xl ${colors.text}`}>{STATUS_META[table.status].icon}</span>
+                    <span className="text-xl font-black text-white leading-none">{table.id}</span>
                   </div>
-                  <span className="text-[9px] font-black text-slate-500 uppercase block leading-none">MESA</span>
-                  <span className="text-xl font-black text-white leading-none">{table.id}</span>
-                  <span className={`text-[9px] font-black block mt-1 ${colors.text}`}>{meta.label}</span>
-                  {total > 0 && (
-                    <span className="text-[9px] font-black text-primary block mt-0.5 font-mono">R$ {total.toFixed(0)}</span>
-                  )}
-                  {/* Cronômetro ao vivo */}
-                  {(() => {
-                    const timer = getTableTimer(table.id);
-                    if (!timer) return null;
-                    const isLong = timer.includes('h') || parseInt(timer.split(':')[0]) >= 60;
-                    return (
-                      <span className={`text-[10px] font-black font-mono flex items-center justify-center gap-0.5 mt-0.5 ${isLong ? 'text-amber-400' : 'text-emerald-400/70'}`}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '10px' }}>schedule</span>
-                        {timer}
-                      </span>
-                    );
-                  })()}
-                </div>
-              </div>
-            );
-          })}
-        </div>
 
-        {/* Painel lateral de detalhes quando mesa selecionada */}
+                  {(total > 0 || timer) && (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-[#12161b]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 whitespace-nowrap shadow-xl flex flex-col items-center gap-0.5">
+                      {total > 0 && <span className="text-xs font-black text-white">R$ {total.toFixed(0)}</span>}
+                      {timer && (
+                        <div className={`flex items-center gap-1 text-[10px] font-bold ${timer.includes('h') ? 'text-rose-400' : 'text-slate-400'}`}>
+                          <span className="material-symbols-outlined text-[10px]">schedule</span>
+                          {timer}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#080c10] custom-scrollbar">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {areaTables.map(table => {
+                const colors = getTableColors(table.status);
+                const cart = openTables[table.id] || [];
+                const total = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
+                const timer = getTableTimer(table.id);
+                const isSelected = selectedTableId === table.id;
+                const hasReady = cart.some(i => i.status === 'READY');
+
+                return (
+                  <div
+                    key={table.id}
+                    onClick={() => setSelectedTableId(table.id === selectedTableId ? null : table.id)}
+                    className={`relative p-5 rounded-3xl border-2 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer ${colors.border} ${colors.bg} shadow-lg ${isSelected ? 'ring-4 ring-indigo-500/50 scale-[1.02]' : 'hover:scale-[1.02] hover:brightness-125'}`}
+                  >
+                    {hasReady && (
+                      <div className="absolute -inset-1 rounded-[2rem] animate-ping opacity-20 ring-4 ring-emerald-400 pointer-events-none" />
+                    )}
+                    {hasReady && (
+                      <div className="absolute -top-3 -right-3 size-8 bg-emerald-500 rounded-full border-4 border-[#080c10] flex items-center justify-center animate-bounce shadow-xl">
+                        <span className="material-symbols-outlined text-white text-[14px] font-black">notifications_active</span>
+                      </div>
+                    )}
+                    <span className={`material-symbols-outlined text-3xl ${colors.text}`}>{STATUS_META[table.status].icon}</span>
+                    <div className="text-center">
+                      <span className="text-[10px] font-black text-slate-500 uppercase block tracking-widest">Mesa</span>
+                      <span className="text-3xl font-black text-white leading-none tracking-tighter">{table.id}</span>
+                    </div>
+                    {(total > 0 || timer) && (
+                      <div className="flex flex-col items-center mt-3 pt-3 border-t border-white/10 gap-1 w-full">
+                        {total > 0 && <span className="text-sm font-black text-indigo-400 font-mono">R$ {total.toFixed(0)}</span>}
+                        {timer && (
+                          <div className={`flex items-center gap-1 text-[10px] font-bold font-mono ${timer.includes('h') ? 'text-rose-400' : 'text-slate-400'}`}>
+                            <span className="material-symbols-outlined text-[12px]">schedule</span>
+                            {timer}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {areaTables.length === 0 && (
+              <div className="h-full flex flex-col items-center justify-center opacity-30 mt-20">
+                <span className="material-symbols-outlined text-7xl mb-4 text-slate-500">deck</span>
+                <p className="text-sm font-black uppercase tracking-widest text-slate-500">Nenhuma mesa nesta área</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PAINEL DE DETALHES (HÍBRIDO: SIDEBAR OU GAVETA MOBILE) */}
         {selectedTable && (
-          <aside className="w-72 border-l border-white/5 bg-[#0d1118] flex flex-col shrink-0 animate-in slide-in-from-right duration-200">
-            <div className="p-5 border-b border-white/5">
+        <div className="fixed inset-0 z-40 flex items-end md:items-stretch justify-end pointer-events-none">
+          {/* Overlay fundo mobile */}
+          <div 
+            className="absolute inset-0 bg-black/60 md:bg-black/40 backdrop-blur-sm pointer-events-auto transition-opacity animate-in fade-in"
+            onClick={() => setSelectedTableId(null)}
+          />
+          
+          {/* Sidebar / Bottom Sheet */}
+          <div className="w-full md:w-[450px] bg-[#12161b] md:border-l border-white/5 h-[85dvh] md:h-full flex flex-col pointer-events-auto rounded-t-3xl md:rounded-none overflow-hidden relative shadow-2xl shadow-black animate-in slide-in-from-bottom md:slide-in-from-right z-10">
+            {/* Grabber para mobile */}
+            <div className="w-full flex justify-center py-3 md:hidden">
+              <div className="w-12 h-1.5 bg-white/20 rounded-full" />
+            </div>
+
+            {/* Cabeçalho da Mesa */}
+            <div className="p-6 md:p-8 flex items-center justify-between border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent shrink-0">
               <div className="flex justify-between items-start">
                 <div>
-                  <h3 className="text-2xl font-black italic uppercase text-white">Mesa {selectedTable.id}</h3>
-                  <div className={`text-[10px] font-black uppercase tracking-widest mt-0.5 ${getTableColors(selectedTable.status).text}`}>
-                    {STATUS_META[selectedTable.status].label} • {selectedTable.capacity} lugares
+                  <h3 className="text-3xl font-black italic text-white uppercase tracking-tighter">Mesa {selectedTable.id}</h3>
+                  <p className={`text-[10px] font-black uppercase tracking-widest mt-1 ${getTableColors(selectedTable.status).text}`}>
+                    {STATUS_META[selectedTable.status].label} • {selectedTable.capacity} Lugares
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setConfirmRemove(selectedTable.id)} className="size-10 bg-rose-500/10 text-rose-500 rounded-xl flex items-center justify-center active:bg-rose-500 active:text-white transition-all"><span className="material-symbols-outlined">delete</span></button>
+                  <button onClick={() => setSelectedTableId(null)} className="size-10 bg-white/5 text-slate-500 rounded-xl flex items-center justify-center"><span className="material-symbols-outlined">close</span></button>
+                </div>
+              </div>
+              {selectedTimer && (
+                <div className="mt-4 flex items-center gap-2 text-xs font-black text-slate-400 bg-black/40 p-2 rounded-lg border border-white/5">
+                  <span className="material-symbols-outlined text-sm text-indigo-400">timer</span>
+                  Tempo de permanência: <span className="text-white font-mono">{selectedTimer}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Lista de Itens no Carrinho da Mesa */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+              {selectedCart.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center opacity-20 py-10">
+                  <span className="material-symbols-outlined text-6xl">receipt_long</span>
+                  <p className="text-[10px] font-black uppercase mt-2">Sem pedidos ativos</p>
+                </div>
+              ) : selectedCart.map((item, idx) => (
+                <div key={idx} className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 flex flex-col gap-2">
+                  <div className="flex justify-between items-start">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-bold text-white block truncate">{item.qty}x {item.name}</span>
+                      {item.notes && <p className="text-[10px] text-amber-400/70 italic mt-1">" {item.notes} "</p>}
+                    </div>
+                    <span className="text-sm font-black text-indigo-400 ml-4 font-mono">R${(item.price * item.qty).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-start">
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${getItemStatusBadge(item.status).cls}`}>
+                      {getItemStatusBadge(item.status).label}
+                    </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  {/* Botão remover mesa */}
-                  <button
-                    onClick={() => setConfirmRemove(selectedTable.id)}
-                    className="size-7 flex items-center justify-center text-slate-600 hover:text-rose-400 transition-colors rounded-lg hover:bg-rose-500/10"
-                    title="Remover mesa"
-                  >
-                    <span className="material-symbols-outlined text-sm">delete</span>
-                  </button>
-                  <button onClick={() => setSelectedTableId(null)} className="size-7 flex items-center justify-center text-slate-500 hover:text-white transition-colors rounded-lg hover:bg-white/5">
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                </div>
-              </div>
-              {/* Timer ao vivo no painel */}
-              {selectedTimer && (
-                <div className={`mt-2 flex items-center gap-1.5 text-[11px] font-black font-mono ${selectedTimer.includes('h') ? 'text-amber-400' : 'text-emerald-400'}`}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>schedule</span>
-                  {selectedTimer} na mesa
-                </div>
-              )}
+              ))}
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
-              {selectedCart.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 gap-2">
-                  <span className="material-symbols-outlined text-3xl text-slate-700">receipt_long</span>
-                  <p className="text-center text-slate-600 font-bold text-xs">Mesa vazia</p>
+            {/* Rodapé e Ação Principal */}
+            <div className="p-6 md:p-8 border-t border-white/5 flex flex-col shrink-0 pb-8 md:pb-8 bg-[#12161b]">
+              <div className="flex justify-between items-end mb-6">
+                <div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Consumo</p>
+                  <p className="text-3xl font-black text-white italic font-mono">R$ {selectedTotal.toFixed(2)}</p>
                 </div>
-              ) : (
-                selectedCart.map((item, i) => {
-                  const badge = getItemStatusBadge(item.status);
-                  return (
-                    <div key={i} className="flex justify-between items-start p-3 bg-white/[0.03] border border-white/5 rounded-xl gap-2">
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-bold text-white block truncate">{item.qty}x {item.name}</span>
-                        {item.notes && <p className="text-[9px] text-amber-400/60 italic mt-0.5">📝 {item.notes}</p>}
-                        <span className={`inline-block mt-1 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full border ${badge.cls}`}>
-                          {badge.label}
-                        </span>
-                      </div>
-                      <span className="text-xs font-black text-primary shrink-0">R$ {(item.price * item.qty).toFixed(2)}</span>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="p-4 border-t border-white/5 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-slate-500 font-bold">Total Consumo</span>
-                <span className="text-xl font-black text-white">R$ {selectedTotal.toFixed(2)}</span>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Serviço (10%)</p>
+                  <p className="text-sm font-bold text-slate-400 font-mono">R$ {(selectedTotal * 0.1).toFixed(2)}</p>
+                </div>
               </div>
               <button
-                onClick={() => { selectActiveTable(selectedTable.id); }}
-                className="w-full py-3 bg-primary text-white rounded-xl text-xs font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+                onClick={() => selectActiveTable(selectedTable.id)}
+                className="w-full py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] shadow-lg shadow-indigo-600/30 active:scale-95 transition-all flex items-center justify-center gap-3"
               >
-                <span className="material-symbols-outlined text-sm">point_of_sale</span>
-                Abrir no PDV
+                <span className="material-symbols-outlined">point_of_sale</span>
+                Lançar / Finalizar Pedido
               </button>
             </div>
-          </aside>
+          </div>
+        </div>
         )}
       </div>
 
-      {/* Modal — Adicionar Mesa */}
+      {/* MODAL ADICIONAR MESA (COMPLETO) */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)}>
-          <div className="bg-[#0d1118] border border-white/10 rounded-2xl p-6 w-80 shadow-2xl animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-black italic uppercase text-white mb-1">Nova Mesa</h3>
-            <p className="text-xs text-slate-500 mb-5">
-              Área: <span className="font-bold text-slate-300">
-                {activeArea === 'main' ? 'Salão Principal' : activeArea === 'vip' ? 'VIP / Tatame' : 'Externo'}
-              </span>
-            </p>
+        <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0d1218] border border-white/10 rounded-[3rem] p-8 w-full max-w-xs shadow-2xl text-center animate-in zoom-in-95">
+            <div className="size-16 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <span className="material-symbols-outlined text-3xl">add_business</span>
+            </div>
+            <h3 className="text-2xl font-black text-white uppercase italic mb-2">Nova Mesa</h3>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-8">Defina a capacidade de lugares</p>
 
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Capacidade (lugares)</label>
-            <div className="flex items-center gap-3 mb-6">
-              <button
-                onClick={() => setNewCapacity(c => Math.max(1, c - 1))}
-                className="size-10 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center text-white hover:bg-white/10 transition-all font-black text-lg"
-              >−</button>
-              <span className="text-3xl font-black text-white flex-1 text-center">{newCapacity}</span>
-              <button
-                onClick={() => setNewCapacity(c => Math.min(20, c + 1))}
-                className="size-10 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center text-white hover:bg-white/10 transition-all font-black text-lg"
-              >+</button>
+            <div className="flex items-center gap-4 mb-10">
+              <button onClick={() => setNewCapacity(c => Math.max(1, c - 1))} className="size-14 rounded-2xl bg-white/5 border border-white/10 text-white text-2xl font-black active:bg-indigo-600 transition-colors">-</button>
+              <span className="flex-1 text-5xl font-black text-white font-mono">{newCapacity}</span>
+              <button onClick={() => setNewCapacity(c => c + 1)} className="size-14 rounded-2xl bg-white/5 border border-white/10 text-white text-2xl font-black active:bg-indigo-600 transition-colors">+</button>
             </div>
 
-            <div className="flex gap-2">
-              <button onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 border border-white/10 rounded-xl text-xs font-black text-slate-500 hover:text-white uppercase tracking-widest transition-all">
-                Cancelar
-              </button>
-              <button onClick={handleAddTable} className="flex-1 py-2.5 bg-primary rounded-xl text-xs font-black text-white uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-primary/20">
-                Adicionar
-              </button>
-            </div>
+            <button onClick={() => { addTable(newCapacity, activeArea); setShowAddModal(false); }} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-600/20 active:scale-95 transition-all">Criar Mesa Agora</button>
+            <button onClick={() => setShowAddModal(false)} className="mt-4 text-slate-600 text-[10px] font-black uppercase tracking-widest">Desistir</button>
           </div>
         </div>
       )}
 
-      {/* Modal — Confirmar Remover Mesa */}
+      {/* MODAL CONFIRMAR REMOÇÃO */}
       {confirmRemove && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setConfirmRemove(null)}>
-          <div className="bg-[#0d1118] border border-white/10 rounded-2xl p-6 w-72 shadow-2xl animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-            <span className="material-symbols-outlined text-rose-500 text-3xl mb-2 block">warning</span>
-            <h3 className="text-base font-black text-white mb-1">Remover Mesa {confirmRemove}?</h3>
-            <p className="text-xs text-slate-500 mb-5">Esta ação remove a mesa e todos os dados do carrinho associados.</p>
-            <div className="flex gap-2">
-              <button onClick={() => setConfirmRemove(null)} className="flex-1 py-2.5 border border-white/10 rounded-xl text-xs font-black text-slate-500 hover:text-white uppercase tracking-widest transition-all">
-                Cancelar
-              </button>
-              <button onClick={() => handleRemoveTable(confirmRemove)} className="flex-1 py-2.5 bg-rose-500 rounded-xl text-xs font-black text-white uppercase tracking-widest hover:brightness-110 transition-all">
-                Remover
-              </button>
+        <div className="fixed inset-0 z-[600] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0d1218] border border-rose-500/30 rounded-[2.5rem] p-8 w-full max-w-xs text-center shadow-2xl animate-in fade-in">
+            <span className="material-symbols-outlined text-rose-500 text-5xl mb-4">warning</span>
+            <h3 className="text-xl font-black text-white uppercase italic mb-2">Remover Mesa?</h3>
+            <p className="text-xs text-slate-500 mb-8">Todos os dados da Mesa {confirmRemove} serão apagados permanentemente.</p>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => handleRemoveTable(confirmRemove)} className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black uppercase text-xs">Sim, Remover</button>
+              <button onClick={() => setConfirmRemove(null)} className="w-full py-4 text-slate-500 font-black uppercase text-xs">Cancelar</button>
             </div>
           </div>
         </div>
