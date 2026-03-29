@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^1.16.8",
+    "@react-google-maps/api": "^2.20.8",
+    "@turf/turf": "^7.3.4",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

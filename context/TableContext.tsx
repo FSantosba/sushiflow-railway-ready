@@ -27,6 +27,7 @@ interface TableContextData {
     getTableTotal: (tableId: string) => number;
     updateItemStatus: (tableId: string, itemId: string, status: 'PENDING' | 'READY' | 'SERVED') => void;
     sendTableOrder: (tableId: string) => void;
+    moveTableItems: (fromId: string, toId: string) => void; // ✨ Trocar de Mesa
     notifyReadyCount: number; // ✨ Contador de itens prontos (notificação)
     clearReadyNotifications: () => void;
     addTable: (capacity: number, area?: string) => void;
@@ -192,6 +193,24 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }));
     };
 
+    const moveTableItems = (fromId: string, toId: string) => {
+        const items = openTables[fromId] || [];
+        if (items.length === 0) return;
+        // Move cart to target table
+        setOpenTables(prev => {
+            const next = { ...prev };
+            next[toId] = [...(prev[toId] || []), ...items];
+            delete next[fromId];
+            return next;
+        });
+        // Update table statuses
+        setTables(prev => prev.map(t => {
+            if (t.id === fromId) return { ...t, status: TableStatus.FREE, timeActive: undefined, currentTotal: undefined };
+            if (t.id === toId) return { ...t, status: TableStatus.OCCUPIED, timeActive: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+            return t;
+        }));
+    };
+
     const closeTable = (tableId: string, paymentMethod: string) => {
         const cart = openTables[tableId] || [];
         const subtotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
@@ -247,6 +266,7 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             getTableTotal,
             updateItemStatus,
             sendTableOrder,
+            moveTableItems,
             notifyReadyCount,
             clearReadyNotifications,
             addTable,

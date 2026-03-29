@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTables } from '../../context/TableContext';
 import { sushiMenu, barMenu, kitchenMenu } from '../../utils/mockData';
 import { MenuItem, TableStatus } from '../../types';
 
 const ALL_ITEMS = [...sushiMenu, ...kitchenMenu, ...barMenu];
-// Selecionando itens mais pedidos como "Atalhos"
 const TOP_ITEMS = ALL_ITEMS.filter(item => item.bestSeller).slice(0, 8);
 
 const QUICK_NOTES = [
@@ -33,14 +32,14 @@ const WaiterView: React.FC = () => {
         tables, openTables, activeTableId, selectActiveTable,
         addItemToTable, removeItemFromTable, sendTableOrder,
         updateItemStatus, getTableTotal, closeTable,
-        notifyReadyCount, clearReadyNotifications,
+        notifyReadyCount, clearReadyNotifications, moveTableItems,
     } = useTables();
 
     const [activeTab, setActiveTab] = useState<TabId>('mesas');
     const [category, setCategory] = useState<Category>('all');
     const [search, setSearch] = useState('');
 
-    // Add item flow
+    // Item notes modal (only opened by long-press or "+" icon)
     const [pendingItem, setPendingItem] = useState<MenuItem | null>(null);
     const [noteText, setNoteText] = useState('');
 
@@ -49,9 +48,21 @@ const WaiterView: React.FC = () => {
     const [paymentStep, setPaymentStep] = useState<'summary' | 'processing' | 'success'>('summary');
     const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
 
+    // Async send state
+    const [isSending, setIsSending] = useState(false);
+
+    // Switch Table modal
+    const [isSwitchTableOpen, setIsSwitchTableOpen] = useState(false);
+
     // Toasts
-    const [globalToast, setGlobalToast] = useState<{ message: string, id: number } | null>(null);
+    const [globalToast, setGlobalToast] = useState<{ message: string; type: 'info' | 'success'; id: number } | null>(null);
     const prevNotifyCount = useRef(notifyReadyCount);
+
+    const showToast = useCallback((message: string, type: 'info' | 'success' = 'info') => {
+        const id = Date.now();
+        setGlobalToast({ message, type, id });
+        setTimeout(() => setGlobalToast(c => c?.id === id ? null : c), 3500);
+    }, []);
 
     // Timer
     const [now, setNow] = useState(Date.now());
@@ -60,17 +71,13 @@ const WaiterView: React.FC = () => {
         return () => clearInterval(t);
     }, []);
 
-    // Notificações em Tempo Real (Toast)
+    // Ready notifications toast
     useEffect(() => {
         if (notifyReadyCount > prevNotifyCount.current) {
-            const id = Date.now();
-            setGlobalToast({ message: '🔔 Pratos prontos na cozinha!', id });
-            setTimeout(() => {
-                setGlobalToast(current => current?.id === id ? null : current);
-            }, 4000);
+            showToast('🔔 Pratos prontos na cozinha!', 'info');
         }
         prevNotifyCount.current = notifyReadyCount;
-    }, [notifyReadyCount]);
+    }, [notifyReadyCount, showToast]);
 
     const formatElapsed = (ms: number) => {
         const s = Math.floor(ms / 1000);
@@ -87,6 +94,11 @@ const WaiterView: React.FC = () => {
     const grandTotal = currentTotal + serviceFee;
     const hasDrafts = currentCart.some(i => i.status === 'DRAFT');
     const readyItems = currentCart.filter(i => i.status === 'READY');
+
+    const freeTables = useMemo(() =>
+        tables.filter(t => t.status === TableStatus.FREE && t.id !== activeTableId),
+        [tables, activeTableId]
+    );
 
     const readyByTable = useMemo(() => {
         const result: { tableId: string; items: typeof currentCart }[] = [];
@@ -110,27 +122,25 @@ const WaiterView: React.FC = () => {
         setActiveTab('comanda');
     };
 
-    const handleTapItem = (item: MenuItem, fastAdd = false) => {
+    // Instant 1-tap add (no confirmation)
+    const handleInstantAdd = (item: MenuItem) => {
         if (!item.available) return;
-        if (fastAdd) {
-            // Fast add without notes
-            addItemToTable(activeTableId, item, undefined);
-            // Optional: vibration feedback if supported
-            if (navigator.vibrate) navigator.vibrate(50);
-        } else {
-            setPendingItem(item);
-            setNoteText('');
-        }
+        addItemToTable(activeTableId, item, undefined);
+        if (navigator.vibrate) navigator.vibrate(50);
+    };
+
+    // Open notes sheet (from long-press or menu icon)
+    const handleOpenNotes = (item: MenuItem) => {
+        if (!item.available) return;
+        setPendingItem(item);
+        setNoteText('');
     };
 
     const toggleQuickNote = (note: string) => {
         setNoteText(prev => {
             const notes = prev.split(',').map(n => n.trim()).filter(Boolean);
-            if (notes.includes(note)) {
-                return notes.filter(n => n !== note).join(', ');
-            } else {
-                return [...notes, note].join(', ');
-            }
+            if (notes.includes(note)) return notes.filter(n => n !== note).join(', ');
+            return [...notes, note].join(', ');
         });
     };
 
@@ -139,6 +149,27 @@ const WaiterView: React.FC = () => {
         addItemToTable(activeTableId, pendingItem, noteText.trim() || undefined);
         setPendingItem(null);
         setNoteText('');
+    };
+
+    // ── Async send: optimistic UI, DB fires in background ──────────────────────
+    const handleSendOrder = () => {
+        if (isSending || !hasDrafts) return;
+        setIsSending(true);
+        // Optimistic: mark drafts as pending immediately
+        sendTableOrder(activeTableId);
+        // Simulate async DB write to Railway (non-blocking)
+        setTimeout(() => {
+            setIsSending(false);
+            showToast('✅ Pedido enviado para a cozinha!', 'success');
+        }, 400);
+    };
+
+    // ── Switch table (2-click) ──────────────────────────────────────────────────
+    const handleSwitchTable = (targetId: string) => {
+        moveTableItems(activeTableId, targetId);
+        selectActiveTable(targetId);
+        setIsSwitchTableOpen(false);
+        showToast(`✅ Mesa transferida para Mesa ${targetId}`, 'success');
     };
 
     const handleFinishPayment = (mode: string) => {
@@ -155,9 +186,8 @@ const WaiterView: React.FC = () => {
         }, 1500);
     };
 
-    // ─── 1. Visão Geral do Salão (Mapa de Mesas Melhorado) ──────────────────────
+    // ─── 1. Visão Geral do Salão ─────────────────────────────────────────────────
     const TabMesas = () => {
-        // Organizar por status para destacar as que precisam de atenção (Ocupadas e Reservas)
         const sortedTables = [...tables].sort((a, b) => {
             if (a.status === TableStatus.OCCUPIED && b.status !== TableStatus.OCCUPIED) return -1;
             if (a.status !== TableStatus.OCCUPIED && b.status === TableStatus.OCCUPIED) return 1;
@@ -184,17 +214,15 @@ const WaiterView: React.FC = () => {
                             const cart = openTables[table.id] || [];
                             const hasReady = cart.some(i => i.status === 'READY');
                             const total = getTableTotal(table.id);
-
                             const oldest = cart.reduce((min, i) => {
                                 const ts = (i as any).createdAt || now;
                                 return ts < min ? ts : min;
                             }, now);
                             const elapsedMs = now - oldest;
                             const elapsed = cart.length > 0 ? formatElapsed(elapsedMs) : null;
-
-                            // Progress bar logic (e.g. max 2 horas = 7200000ms)
                             const maxTime = 7200000;
-                            const progressPct = table.status === TableStatus.OCCUPIED && cart.length > 0 ? Math.min(100, (elapsedMs / maxTime) * 100) : 0;
+                            const progressPct = table.status === TableStatus.OCCUPIED && cart.length > 0
+                                ? Math.min(100, (elapsedMs / maxTime) * 100) : 0;
 
                             return (
                                 <button
@@ -203,32 +231,27 @@ const WaiterView: React.FC = () => {
                                     className={`relative overflow-hidden p-4 rounded-3xl border-2 flex flex-col gap-3 text-left transition-all active:scale-95 bg-card-dark ${meta.border} shadow-lg`}
                                 >
                                     <div className={`absolute top-0 left-0 right-0 h-24 bg-gradient-to-b ${meta.gradient} opacity-50`}></div>
-
                                     {hasReady && (
                                         <span className="absolute top-4 right-4 flex h-3 w-3">
                                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                                             <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
                                         </span>
                                     )}
-
                                     <div className="relative z-10 flex items-center justify-between">
                                         <span className="text-3xl font-black text-white italic tracking-tighter">Mesa {table.id}</span>
                                     </div>
-
                                     <div className="relative z-10 flex items-center justify-between text-xs mt-1">
                                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${meta.border} ${meta.text} bg-background-dark/80 backdrop-blur`}>
                                             {meta.label}
                                         </span>
                                         <span className="text-slate-400 font-bold">{table.capacity} pax</span>
                                     </div>
-
                                     {table.status === TableStatus.OCCUPIED && (
                                         <div className="relative z-10 mt-auto pt-4 space-y-2">
                                             <div className="flex justify-between items-end">
                                                 <span className="font-mono text-sm font-bold text-slate-300">⏱ {elapsed || '00:00'}</span>
                                                 <span className={`text-lg font-black ${meta.text}`}>R$ {total.toFixed(2)}</span>
                                             </div>
-                                            {/* Linha de tempo visual */}
                                             <div className="w-full h-1 bg-black/50 rounded-full overflow-hidden">
                                                 <div className={`h-full ${progressPct > 75 ? 'bg-danger' : progressPct > 50 ? 'bg-warning' : 'bg-primary'} transition-all`} style={{ width: `${progressPct}%` }}></div>
                                             </div>
@@ -251,7 +274,7 @@ const WaiterView: React.FC = () => {
         );
     };
 
-    // ─── 2. Comanda com Atalhos Rápidos ─────────────────────────────────────────
+    // ─── 2. Comanda com Atalhos Rápidos 4×2 ────────────────────────────────────
     const TabComanda = () => {
         const oldest = currentCart.reduce((min, i) => {
             const ts = (i as any).createdAt || now;
@@ -261,42 +284,62 @@ const WaiterView: React.FC = () => {
 
         return (
             <div className="flex-1 flex flex-col overflow-hidden bg-background-dark">
-                {/* Mesa header */}
-                <div className="px-4 py-4 bg-card-dark border-b border-white/10 flex items-center justify-between z-10 shadow-lg">
-                    <div>
+                {/* Header da Mesa */}
+                <div className="px-4 py-3 bg-card-dark border-b border-white/10 flex items-center justify-between z-10 shadow-lg gap-3">
+                    <div className="min-w-0 flex-1">
                         <h2 className="text-2xl font-black italic text-white tracking-tighter">MESA {activeTableId || '—'}</h2>
-                        {elapsed && <p className="text-xs text-primary font-bold uppercase tracking-widest mt-1">⏱ Ativa há {elapsed}</p>}
+                        {elapsed && <p className="text-xs text-primary font-bold uppercase tracking-widest">⏱ Ativa há {elapsed}</p>}
                     </div>
+                    {/* Trocar Mesa */}
+                    {currentCart.length > 0 && (
+                        <button
+                            onClick={() => setIsSwitchTableOpen(true)}
+                            className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-widest rounded-xl active:scale-95 transition-all"
+                        >
+                            <span className="material-symbols-outlined text-sm">swap_horiz</span>
+                            Trocar Mesa
+                        </button>
+                    )}
                     <button
                         onClick={() => { setActiveTab('cardapio'); }}
-                        className="size-14 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-all group"
+                        className="shrink-0 size-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-all"
                     >
-                        <span className="material-symbols-outlined text-white text-3xl group-hover:rotate-90 transition-transform">add</span>
+                        <span className="material-symbols-outlined text-white text-2xl">add</span>
                     </button>
                 </div>
 
-                {/* Atalhos Rápidos (Rodízio & À La Carte) */}
+                {/* ── Atalhos Rápidos: grade 4×2 ── */}
                 {activeTableId && (
-                    <div className="px-4 py-3 border-b border-white/5 bg-black/20 shrink-0">
+                    <div className="px-3 py-3 border-b border-white/5 bg-black/20 shrink-0">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
                                 <span className="material-symbols-outlined text-xs">bolt</span>
                                 Lançamento Rápido
                             </span>
-                            <span className="text-[9px] text-slate-600 font-bold">1-Click</span>
+                            <span className="text-[9px] text-slate-600 font-bold">1-Toque · Seg. p/ obs.</span>
                         </div>
-                        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                        <div className="grid grid-cols-4 gap-2">
                             {TOP_ITEMS.map((item, idx) => (
                                 <button
                                     key={`top-${idx}`}
-                                    onClick={() => handleTapItem(item, true)}
-                                    className="shrink-0 w-28 bg-card-dark border border-white/10 rounded-xl p-2 flex flex-col gap-1 active:scale-95 active:bg-white/10 transition-all shadow-sm"
+                                    onClick={() => handleInstantAdd(item)}
+                                    onContextMenu={e => { e.preventDefault(); handleOpenNotes(item); }}
+                                    className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border active:scale-90 transition-all ${!item.available ? 'opacity-30 grayscale' : 'bg-card-dark border-white/10 hover:border-primary/50 active:bg-white/10'}`}
+                                    disabled={!item.available}
+                                    title={item.name}
                                 >
-                                    <div className="h-14 rounded-lg bg-background-dark overflow-hidden mb-1">
+                                    <div className="w-full aspect-square rounded-lg overflow-hidden bg-black/40">
                                         <img src={item.image} className="w-full h-full object-cover opacity-80" alt={item.name} />
                                     </div>
-                                    <span className="text-[9px] font-bold text-white leading-tight truncate">{item.name}</span>
-                                    <span className="text-[10px] font-black text-primary">R$ {item.price.toFixed(2)}</span>
+                                    <span className="text-[8px] font-bold text-white leading-tight text-center line-clamp-1 w-full">{item.name}</span>
+                                    <span className="text-[9px] font-black text-primary">R${item.price.toFixed(0)}</span>
+                                    {/* Note button overlay */}
+                                    <button
+                                        onClick={e => { e.stopPropagation(); handleOpenNotes(item); }}
+                                        className="absolute top-1 right-1 size-4 bg-black/60 rounded-full flex items-center justify-center"
+                                    >
+                                        <span className="material-symbols-outlined text-[9px] text-slate-400">edit_note</span>
+                                    </button>
                                 </button>
                             ))}
                         </div>
@@ -324,8 +367,6 @@ const WaiterView: React.FC = () => {
                                             }`}
                                     >
                                         {isDraft && <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>}
-
-                                        {/* Status badge */}
                                         <span className={`shrink-0 px-2 py-1.5 rounded-lg text-[9px] font-black uppercase flex flex-col items-center justify-center text-center leading-none ${isDraft ? 'bg-amber-500/10 text-amber-500' :
                                             isReady ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' :
                                                 'bg-blue-500/10 text-blue-400'
@@ -334,14 +375,11 @@ const WaiterView: React.FC = () => {
                                                 isReady ? <><span className="material-symbols-outlined text-lg mb-0.5">room_service</span>PRONTO</> :
                                                     <><span className="material-symbols-outlined text-lg mb-0.5">skillet</span>PREPARO</>}
                                         </span>
-
                                         <div className="flex-1 min-w-0 pl-2">
                                             <p className="text-base font-black text-white truncate">{item.qty}x {item.name}</p>
                                             {item.notes && <p className="text-xs text-amber-400/80 font-bold italic mt-0.5">📝 {item.notes}</p>}
                                             <p className="text-sm text-slate-400 font-bold font-mono mt-1">R$ {(item.price * item.qty).toFixed(2)}</p>
                                         </div>
-
-                                        {/* Ações */}
                                         {isReady && (
                                             <button
                                                 onClick={() => updateItemStatus(activeTableId, item.id, 'SERVED')}
@@ -367,29 +405,38 @@ const WaiterView: React.FC = () => {
 
                 {/* Rodapé de ações */}
                 {currentCart.length > 0 && (
-                    <div className="p-5 border-t border-border-dark bg-[#12161b] shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-20">
+                    <div className="p-4 border-t border-border-dark bg-[#12161b] shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-20">
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-xs text-slate-500 font-bold uppercase">Subtotal R$ {currentTotal.toFixed(2)}</span>
                             <span className="text-xs text-slate-500 font-bold uppercase">Taxa R$ {serviceFee.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between items-end mb-4">
+                        <div className="flex justify-between items-end mb-3">
                             <span className="text-sm font-black uppercase text-slate-300">Total da Mesa</span>
                             <span className="text-3xl font-black text-primary tracking-tighter italic">R$ {grandTotal.toFixed(2)}</span>
                         </div>
-
                         <div className="flex gap-3">
                             {hasDrafts ? (
                                 <button
-                                    onClick={() => sendTableOrder(activeTableId)}
-                                    className="flex-1 py-4.5 rounded-2xl bg-emerald-500 text-white text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-xl shadow-emerald-500/20"
+                                    onClick={handleSendOrder}
+                                    disabled={isSending}
+                                    className={`flex-1 py-4 rounded-2xl text-white text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-xl ${isSending ? 'bg-emerald-700 shadow-none' : 'bg-emerald-500 shadow-emerald-500/20'}`}
                                 >
-                                    <span className="material-symbols-outlined text-xl">send</span>
-                                    Lançar para Cozinha
+                                    {isSending ? (
+                                        <>
+                                            <div className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            Enviando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="material-symbols-outlined text-xl">send</span>
+                                            Lançar para Cozinha
+                                        </>
+                                    )}
                                 </button>
                             ) : (
                                 <button
                                     onClick={() => { setIsCheckoutOpen(true); setPaymentStep('summary'); }}
-                                    className="flex-1 py-4.5 rounded-2xl bg-white text-black text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-xl shadow-white/10"
+                                    className="flex-1 py-4 rounded-2xl bg-white text-black text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-xl shadow-white/10"
                                 >
                                     <span className="material-symbols-outlined text-xl">receipt_long</span>
                                     Resumo da Conta
@@ -402,10 +449,17 @@ const WaiterView: React.FC = () => {
         );
     };
 
-    // ─── 3. Cardápio Completo ───────────────────────────────────────────────────
+    // ─── 3. Cardápio Completo (1-toque lança direto) ────────────────────────────
     const TabCardapio = () => (
         <div className="flex-1 flex flex-col overflow-hidden bg-background-dark">
             <div className="px-4 py-4 bg-card-dark border-b border-white/10 space-y-4 shadow-md z-10">
+                <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Mesa {activeTableId} · Toque p/ adicionar</span>
+                    <div className="flex items-center gap-1 text-[9px] text-slate-600 font-bold">
+                        <span className="material-symbols-outlined text-[11px]">edit_note</span>
+                        ✎ = obs
+                    </div>
+                </div>
                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                     {(['all', 'sushi', 'kitchen', 'drinks'] as Category[]).map(cat => (
                         <button
@@ -424,19 +478,19 @@ const WaiterView: React.FC = () => {
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Buscar prato ou bebida..."
-                        className="w-full pl-12 pr-4 py-3.5 bg-[#1a2329] border border-white/5 rounded-2xl text-sm text-white outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all font-bold"
+                        className="w-full pl-12 pr-4 py-3 bg-[#1a2329] border border-white/5 rounded-2xl text-sm text-white outline-none focus:border-primary transition-all font-bold"
                     />
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                     {filteredItems.map(item => (
                         <button
                             key={item.id}
-                            onClick={() => handleTapItem(item, false)}
+                            onClick={() => handleInstantAdd(item)}
                             disabled={!item.available}
-                            className={`bg-card-dark border border-white/5 rounded-3xl p-3 flex flex-col gap-2 text-left active:scale-[0.97] transition-all relative overflow-hidden shadow-lg ${!item.available ? 'opacity-40 grayscale' : 'hover:border-primary/50'}`}
+                            className={`bg-card-dark border border-white/5 rounded-3xl p-3 flex flex-col gap-2 text-left active:scale-[0.95] transition-all relative overflow-hidden shadow-lg ${!item.available ? 'opacity-40 grayscale' : 'hover:border-primary/50'}`}
                         >
                             {item.bestSeller && (
                                 <span className="absolute top-3 left-3 px-2 py-1 bg-primary text-white text-[9px] font-black uppercase tracking-widest rounded-lg z-10 shadow-md">Top</span>
@@ -444,13 +498,18 @@ const WaiterView: React.FC = () => {
                             <div className="aspect-square rounded-2xl overflow-hidden bg-black/50">
                                 <img src={item.image} className="w-full h-full object-cover mix-blend-overlay opacity-90" alt={item.name} />
                             </div>
-                            <div className="pt-1 px-1">
-                                <p className="text-[12px] font-black text-white line-clamp-2 leading-tight h-8">{item.name}</p>
-                                <div className="flex items-center justify-between mt-2">
+                            <div className="px-1">
+                                <p className="text-[11px] font-black text-white line-clamp-2 leading-tight h-8">{item.name}</p>
+                                <div className="flex items-center justify-between mt-1">
                                     <p className="text-sm font-black text-primary font-mono">R$ {item.price.toFixed(2)}</p>
-                                    <div className="size-6 rounded-full bg-white/5 flex items-center justify-center">
-                                        <span className="material-symbols-outlined text-[14px] text-white">add</span>
-                                    </div>
+                                    {/* Notes button */}
+                                    <button
+                                        onClick={e => { e.stopPropagation(); handleOpenNotes(item); }}
+                                        className="size-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/15 transition-colors"
+                                        title="Adicionar observação"
+                                    >
+                                        <span className="material-symbols-outlined text-[13px] text-slate-400">edit_note</span>
+                                    </button>
                                 </div>
                             </div>
                         </button>
@@ -466,7 +525,7 @@ const WaiterView: React.FC = () => {
         </div>
     );
 
-    // ─── 4. Alertas (Notificações em Tempo Real) ────────────────────────────────
+    // ─── 4. Alertas ─────────────────────────────────────────────────────────────
     const TabAlertas = () => (
         <div className="flex-1 overflow-y-auto p-4 bg-background-dark">
             {readyByTable.length === 0 ? (
@@ -533,21 +592,18 @@ const WaiterView: React.FC = () => {
     return (
         <div className="h-full flex flex-col bg-background-dark overflow-hidden relative">
 
-            {/* 🔔 Global Toast Notification */}
+            {/* 🔔 Toast */}
             {globalToast && (
                 <div className="absolute top-6 left-4 right-4 z-[100] animate-in slide-in-from-top-10 fade-in duration-300">
-                    <div className="bg-emerald-500 text-white p-4 rounded-2xl shadow-[0_10px_40px_rgba(16,185,129,0.4)] flex justify-between items-center border-2 border-emerald-400">
+                    <div className={`text-white p-4 rounded-2xl shadow-xl flex justify-between items-center border-2 ${globalToast.type === 'success' ? 'bg-emerald-500 border-emerald-400 shadow-emerald-500/30' : 'bg-card-dark border-primary/40 shadow-primary/10'}`}>
                         <div className="flex items-center gap-3">
-                            <div className="size-10 bg-white/20 rounded-xl flex items-center justify-center">
-                                <span className="material-symbols-outlined text-2xl animate-bounce">room_service</span>
+                            <div className="size-9 bg-white/20 rounded-xl flex items-center justify-center">
+                                <span className="material-symbols-outlined text-xl">{globalToast.type === 'success' ? 'check_circle' : 'room_service'}</span>
                             </div>
-                            <div>
-                                <h4 className="text-sm font-black uppercase tracking-widest">{globalToast.message}</h4>
-                                <p className="text-xs text-emerald-100 font-bold mt-0.5">Toque na aba Alertas para ver.</p>
-                            </div>
+                            <h4 className="text-sm font-black">{globalToast.message}</h4>
                         </div>
-                        <button onClick={() => setGlobalToast(null)} className="p-2 bg-white/10 rounded-xl">
-                            <span className="material-symbols-outlined text-white">close</span>
+                        <button onClick={() => setGlobalToast(null)} className="p-1.5 bg-white/10 rounded-xl">
+                            <span className="material-symbols-outlined text-sm text-white">close</span>
                         </button>
                     </div>
                 </div>
@@ -580,60 +636,48 @@ const WaiterView: React.FC = () => {
                                         {tab.badge > 9 ? '9+' : tab.badge}
                                     </span>
                                 )}
-
                                 <div className={`relative flex items-center justify-center transition-all duration-300 ${isActive ? 'scale-125 -translate-y-1' : ''}`}>
-                                    <span className={`material-symbols-outlined text-2xl ${isActive ? 'fill-1' : ''}`}>
-                                        {tab.icon}
-                                    </span>
-                                    {isActive && (
-                                        <span className="absolute -inset-2 bg-primary/20 rounded-full blur-md -z-10"></span>
-                                    )}
+                                    <span className={`material-symbols-outlined text-2xl ${isActive ? 'fill-1' : ''}`}>{tab.icon}</span>
+                                    {isActive && <span className="absolute -inset-2 bg-primary/20 rounded-full blur-md -z-10"></span>}
                                 </div>
-
                                 <span className={`text-[9px] font-black uppercase tracking-widest transition-all ${isActive ? 'opacity-100 translate-y-0' : 'opacity-70 translate-y-1'}`}>{tab.label}</span>
                             </button>
-                        )
+                        );
                     })}
                 </div>
             </nav>
 
-            {/* Botton Sheet: Adicionar item detalhado */}
+            {/* ── Modal: Notas do Item ────────────────────────────────────────────── */}
             {pendingItem && (
                 <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setPendingItem(null)}>
                     <div className="w-full max-w-lg bg-[#12161b] border-t border-white/10 rounded-t-[2.5rem] p-6 pb-safe shadow-[0_-20px_50px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom-full duration-300" onClick={e => e.stopPropagation()}>
                         <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-6"></div>
-                        <div className="flex items-start gap-4 mb-6">
-                            <div className="size-20 rounded-2xl overflow-hidden bg-background-dark shrink-0 shadow-lg border border-white/5">
+                        <div className="flex items-start gap-4 mb-5">
+                            <div className="size-16 rounded-2xl overflow-hidden bg-background-dark shrink-0 shadow-lg border border-white/5">
                                 <img src={pendingItem.image} className="w-full h-full object-cover" alt={pendingItem.name} />
                             </div>
                             <div className="pt-1">
-                                <span className="px-2 py-0.5 bg-white/10 text-slate-300 text-[9px] font-black uppercase rounded mb-1 inline-block">Mesa {activeTableId || '?'}</span>
-                                <h3 className="text-xl font-black text-white leading-tight">{pendingItem.name}</h3>
-                                <p className="text-primary font-black text-xl mt-1 font-mono">R$ {pendingItem.price.toFixed(2)}</p>
+                                <span className="px-2 py-0.5 bg-white/10 text-slate-300 text-[9px] font-black uppercase rounded mb-1 inline-block">Mesa {activeTableId}</span>
+                                <h3 className="text-lg font-black text-white leading-tight">{pendingItem.name}</h3>
+                                <p className="text-primary font-black text-lg mt-1 font-mono">R$ {pendingItem.price.toFixed(2)}</p>
                             </div>
                         </div>
-
-                        {/* Atalhos de Observação */}
-                        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-4 -mx-2 px-2">
+                        <div className="flex gap-2 flex-wrap mb-4">
                             {QUICK_NOTES.map(note => {
                                 const isActive = noteText.split(',').map(n => n.trim()).includes(note);
                                 return (
                                     <button
                                         key={note}
                                         onClick={() => toggleQuickNote(note)}
-                                        className={`shrink-0 px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest transition-all ${isActive
-                                                ? 'bg-primary/20 text-primary border border-primary/50'
-                                                : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'
-                                            }`}
+                                        className={`px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all ${isActive ? 'bg-primary/20 text-primary border border-primary/50' : 'bg-white/5 text-slate-400 border border-white/10'}`}
                                     >
-                                        {isActive && <span className="material-symbols-outlined text-[11px] mr-1 align-middle">check</span>}
+                                        {isActive && <span className="material-symbols-outlined text-[10px] mr-1 align-middle">check</span>}
                                         {note}
                                     </button>
                                 );
                             })}
                         </div>
-
-                        <div className="bg-black/30 rounded-2xl p-4 border border-white/5 mb-6 focus-within:border-primary focus-within:bg-black/50 transition-colors">
+                        <div className="bg-black/30 rounded-2xl p-4 border border-white/5 mb-5 focus-within:border-primary transition-colors">
                             <label className="text-[10px] font-black text-primary uppercase tracking-[0.2em] flex items-center gap-1 mb-2">
                                 <span className="material-symbols-outlined text-xs">edit_note</span> Observação Adicional
                             </label>
@@ -647,21 +691,64 @@ const WaiterView: React.FC = () => {
                                 className="w-full bg-transparent text-base text-white outline-none placeholder:text-slate-600 font-bold"
                             />
                         </div>
-
                         <div className="flex gap-3">
-                            <button onClick={() => setPendingItem(null)} className="w-20 shrink-0 py-4.5 bg-white/5 border border-white/10 rounded-2xl text-slate-400 font-black flex items-center justify-center active:scale-95 transition-all">
-                                <span className="material-symbols-outlined text-2xl">close</span>
+                            <button onClick={() => setPendingItem(null)} className="w-16 shrink-0 py-4 bg-white/5 border border-white/10 rounded-2xl text-slate-400 font-black flex items-center justify-center active:scale-95 transition-all">
+                                <span className="material-symbols-outlined text-xl">close</span>
                             </button>
-                            <button onClick={confirmAdd} className="flex-1 py-4.5 bg-primary rounded-2xl text-white text-sm font-black uppercase tracking-[0.1em] shadow-xl shadow-primary/30 active:scale-95 transition-all flex items-center justify-center gap-2">
+                            <button onClick={confirmAdd} className="flex-1 py-4 bg-primary rounded-2xl text-white text-sm font-black uppercase tracking-[0.1em] shadow-xl shadow-primary/30 active:scale-95 transition-all flex items-center justify-center gap-2">
                                 <span className="material-symbols-outlined text-xl">add_shopping_cart</span>
-                                Adicionar e Continuar
+                                Adicionar
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ─── 5. Resumo da Conta (Modal Avançado) ───────────────────────────────── */}
+            {/* ── Modal: Trocar de Mesa (2 cliques) ───────────────────────────────── */}
+            {isSwitchTableOpen && (
+                <div className="fixed inset-0 z-[85] flex items-end justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsSwitchTableOpen(false)}>
+                    <div className="w-full max-w-lg bg-[#12161b] border-t border-white/10 rounded-t-[2.5rem] p-6 pb-safe shadow-[0_-20px_50px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom-full duration-300" onClick={e => e.stopPropagation()}>
+                        <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-5"></div>
+                        <div className="flex items-center gap-3 mb-1">
+                            <div className="size-10 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-center">
+                                <span className="material-symbols-outlined text-amber-400 text-xl">swap_horiz</span>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-white">Trocar de Mesa</h3>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Todos os itens serão transferidos</p>
+                            </div>
+                        </div>
+                        <p className="text-xs text-slate-500 mb-4">Mesa atual: <span className="text-amber-400 font-black">Mesa {activeTableId}</span> · {currentCart.length} item{currentCart.length > 1 ? 's' : ''} · R$ {grandTotal.toFixed(2)}</p>
+
+                        {freeTables.length === 0 ? (
+                            <div className="py-10 flex flex-col items-center gap-3 text-slate-600">
+                                <span className="material-symbols-outlined text-4xl">table_restaurant</span>
+                                <p className="text-sm font-black uppercase tracking-widest text-center">Nenhuma mesa livre disponível</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto custom-scrollbar">
+                                {freeTables.map(table => (
+                                    <button
+                                        key={table.id}
+                                        onClick={() => handleSwitchTable(table.id)}
+                                        className="p-4 bg-emerald-500/10 border-2 border-emerald-500/30 rounded-2xl flex flex-col items-center gap-2 active:scale-90 transition-all hover:border-emerald-500 hover:bg-emerald-500/20"
+                                    >
+                                        <span className="material-symbols-outlined text-emerald-400 text-2xl">table_restaurant</span>
+                                        <span className="text-lg font-black text-white italic">{table.id}</span>
+                                        <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">{table.capacity} pax</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        <button onClick={() => setIsSwitchTableOpen(false)} className="w-full mt-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-slate-400 text-sm font-black uppercase tracking-widest active:scale-95 transition-all">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Modal: Resumo da Conta ───────────────────────────────────────────── */}
             {isCheckoutOpen && (
                 <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/90 backdrop-blur-xl animate-in fade-in duration-300" onClick={() => paymentStep === 'summary' && setIsCheckoutOpen(false)}>
                     <div className="w-full max-w-lg bg-[#12161b] border-t border-white/10 rounded-t-[2.5rem] flex flex-col max-h-[90vh] shadow-[0_-20px_60px_rgba(230,99,55,0.15)] animate-in slide-in-from-bottom-full duration-300" onClick={e => e.stopPropagation()}>
@@ -674,14 +761,12 @@ const WaiterView: React.FC = () => {
                                         <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter">MESA {activeTableId}</h2>
                                         <p className="text-[10px] font-black text-primary uppercase tracking-widest mt-1">Conferência de Conta</p>
                                     </div>
-                                    <button onClick={() => setIsCheckoutOpen(false)} className="size-12 bg-white/5 rounded-2xl flex items-center justify-center text-slate-400 border border-white/5 hover:bg-white/10 transition-colors">
+                                    <button onClick={() => setIsCheckoutOpen(false)} className="size-12 bg-white/5 rounded-2xl flex items-center justify-center text-slate-400 border border-white/5">
                                         <span className="material-symbols-outlined text-2xl">close</span>
                                     </button>
                                 </div>
-
-                                {/* Resumo itens scrollable */}
-                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/30 rounded-3xl p-5 border border-white/5 mb-6 space-y-3">
-                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Itens Consumidos ({currentCart.length})</p>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/30 rounded-3xl p-5 border border-white/5 mb-5 space-y-3">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-3">Itens Consumidos ({currentCart.length})</p>
                                     {currentCart.map((item, i) => (
                                         <div key={i} className="flex justify-between items-start text-sm border-b border-white/5 pb-3 last:border-0 last:pb-0">
                                             <div>
@@ -692,12 +777,10 @@ const WaiterView: React.FC = () => {
                                         </div>
                                     ))}
                                 </div>
-
-                                {/* Totais shrink-0 */}
-                                <div className="bg-gradient-to-br from-card-dark to-[#0d1317] rounded-3xl p-5 border border-white/10 shrink-0 shadow-lg mb-6">
+                                <div className="bg-gradient-to-br from-card-dark to-[#0d1317] rounded-3xl p-5 border border-white/10 shrink-0 shadow-lg mb-5">
                                     <div className="space-y-2 mb-4">
                                         <div className="flex justify-between text-slate-400 text-sm font-bold">
-                                            <span>Subtotal Consumo</span><span className="font-mono">R$ {currentTotal.toFixed(2)}</span>
+                                            <span>Subtotal</span><span className="font-mono">R$ {currentTotal.toFixed(2)}</span>
                                         </div>
                                         <div className="flex justify-between text-slate-400 text-sm font-bold">
                                             <span>Taxa de Serviço (10%)</span><span className="font-mono text-primary">R$ {serviceFee.toFixed(2)}</span>
@@ -708,8 +791,7 @@ const WaiterView: React.FC = () => {
                                         <span className="text-4xl font-black text-primary italic tracking-tighter">R$ {grandTotal.toFixed(2)}</span>
                                     </div>
                                 </div>
-
-                                <div className="shrink-0 space-y-3">
+                                <div className="shrink-0">
                                     <button
                                         onClick={() => handleFinishPayment('solicitado')}
                                         className="w-full py-5 rounded-2xl bg-white text-black font-black uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-[0_10px_30px_rgba(255,255,255,0.15)]"
@@ -717,7 +799,6 @@ const WaiterView: React.FC = () => {
                                         <span className="material-symbols-outlined text-xl">payments</span>
                                         Solicitar Fechamento no Caixa
                                     </button>
-                                    <p className="text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">Alerte o caixa para emitir a nota</p>
                                 </div>
                             </div>
                         )}
@@ -737,13 +818,12 @@ const WaiterView: React.FC = () => {
 
                         {paymentStep === 'success' && (
                             <div className="h-80 flex flex-col items-center justify-center gap-8 text-center px-8">
-                                <div className="size-28 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_60px_rgba(16,185,129,0.4)] relative">
-                                    <div className="absolute inset-0 border-4 border-white/20 rounded-full"></div>
+                                <div className="size-28 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_60px_rgba(16,185,129,0.4)]">
                                     <span className="material-symbols-outlined text-white text-6xl font-black animate-bounce">done_all</span>
                                 </div>
                                 <div>
                                     <h3 className="text-4xl font-black italic uppercase text-white tracking-tighter">Tudo Certo!</h3>
-                                    <p className="text-sm text-slate-400 font-bold mt-2 leading-relaxed">Conta enviada para o caixa.<br />Mesa bloqueada para novos lançamentos.</p>
+                                    <p className="text-sm text-slate-400 font-bold mt-2 leading-relaxed">Conta enviada para o caixa.<br />Mesa liberada.</p>
                                 </div>
                             </div>
                         )}

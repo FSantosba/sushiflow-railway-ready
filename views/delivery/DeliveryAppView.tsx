@@ -6,6 +6,12 @@ import CustomerTrackingView from './CustomerTrackingView';
 import PixPaymentView from '../payment/PixPaymentView';
 import axios from 'axios';
 
+// ✨ NOVO: Importando a inteligência geográfica
+import { calcularViabilidadeDeEntrega, DeliveryZone } from '../../utils/deliveryMath';
+
+// ✨ NOVO: Substitua pela sua chave do Google Cloud
+const GOOGLE_API_KEY = "SUA_CHAVE_AQUI";
+
 // ── Cupons válidos ─────────────────────────────────────────
 const VALID_COUPONS: Record<string, { discount: number; label: string }> = {
     'SUSHI10': { discount: 0.10, label: '10% OFF' },
@@ -13,7 +19,7 @@ const VALID_COUPONS: Record<string, { discount: number; label: string }> = {
     'FRETE0': { discount: 0, label: 'Frete Grátis' },
 };
 
-const DELIVERY_FEE = 6.00;
+// ✨ NOVO: Removida a taxa fixa (const DELIVERY_FEE = 6.00;)
 
 interface CartItem { item: MenuItem; qty: number; obs: string; }
 
@@ -28,8 +34,8 @@ const Toast: React.FC<{ messages: ToastMsg[]; onDismiss: (id: number) => void }>
                 onClick={() => onDismiss(msg.id)}
                 className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl border shadow-xl animate-in slide-in-from-top-4 duration-300 text-sm font-bold cursor-pointer
                     ${msg.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-                      msg.type === 'error'   ? 'bg-rose-50    border-rose-200    text-rose-700' :
-                                              'bg-white      border-slate-200   text-slate-700'}`}
+                        msg.type === 'error' ? 'bg-rose-50    border-rose-200    text-rose-700' :
+                            'bg-white      border-slate-200   text-slate-700'}`}
             >
                 <span className="material-symbols-outlined text-base">
                     {msg.type === 'success' ? 'check_circle' : msg.type === 'error' ? 'error' : 'info'}
@@ -100,7 +106,6 @@ const DeliveryAppView: React.FC = () => {
     const [pixData, setPixData] = useState<{ pedidoId: string, pixCode: string, qrCode: string, total: number } | null>(null);
     const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
 
-    // ✨ Sistema de toast em React (substitui alert())
     const [toasts, setToasts] = useState<ToastMsg[]>([]);
     const showToast = (text: string, type: ToastMsg['type'] = 'info') => {
         const id = Date.now();
@@ -109,24 +114,22 @@ const DeliveryAppView: React.FC = () => {
     };
     const dismissToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
-    // Dados do cliente com persistência
     const [customerName, setCustomerName] = useState(() => localStorage.getItem('@sushiflow:deliveryName') || '');
     const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('@sushiflow:deliveryPhone') || '');
-
-    // ✨ Endereço dividido em campos separados
     const [customerStreet, setCustomerStreet] = useState(() => localStorage.getItem('@sushiflow:deliveryStreet') || '');
     const [customerNumber, setCustomerNumber] = useState(() => localStorage.getItem('@sushiflow:deliveryNumber') || '');
     const [customerHood, setCustomerHood] = useState(() => localStorage.getItem('@sushiflow:deliveryHood') || '');
-
     const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cartao' | 'dinheiro'>('pix');
-
-    // ✨ Busca no cardápio
     const [searchQuery, setSearchQuery] = useState('');
-
-    // ✨ Cupom de desconto
     const [couponInput, setCouponInput] = useState('');
     const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number; label: string } | null>(null);
     const [couponError, setCouponError] = useState('');
+
+    // ✨ NOVO: Estados de validação de frete
+    const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]); // Será preenchido pelo Firebase futuramente
+    const [dynamicDeliveryFee, setDynamicDeliveryFee] = useState<number | null>(null);
+    const [isAddressValid, setIsAddressValid] = useState(false);
+    const [isCheckingAddress, setIsCheckingAddress] = useState(false);
 
     useEffect(() => {
         localStorage.setItem('@sushiflow:deliveryName', customerName);
@@ -136,16 +139,55 @@ const DeliveryAppView: React.FC = () => {
         localStorage.setItem('@sushiflow:deliveryHood', customerHood);
     }, [customerName, customerPhone, customerStreet, customerNumber, customerHood]);
 
+    // ✨ NOVO: Efeito que escuta a digitação do endereço com debounce
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (customerStreet.trim().length > 3 && customerNumber.trim().length > 0) {
+                validarLocalizacao();
+            } else {
+                setIsAddressValid(false);
+                setDynamicDeliveryFee(null);
+            }
+        }, 1500); // Aguarda 1.5s após o cliente parar de digitar
+        return () => clearTimeout(timer);
+    }, [customerStreet, customerNumber, customerHood]);
+
+    const validarLocalizacao = async () => {
+        // Se ainda não carregou as zonas do banco, permite mockar ou pular
+        if (deliveryZones.length === 0) return;
+
+        setIsCheckingAddress(true);
+        const enderecoCompleto = `${customerStreet}, ${customerNumber} - ${customerHood}`;
+
+        // Passamos Bragança Paulista como padrão para o Google Maps focar na cidade correta
+        const resultado = await calcularViabilidadeDeEntrega(
+            enderecoCompleto,
+            deliveryZones,
+            GOOGLE_API_KEY,
+            "Bragança Paulista"
+        );
+
+        if (resultado.sucesso && resultado.zona) {
+            setDynamicDeliveryFee(resultado.zona.fee);
+            setIsAddressValid(true);
+            showToast(`Área: ${resultado.zona.name} | Frete: R$ ${resultado.zona.fee.toFixed(2)}`, 'success');
+        } else {
+            setDynamicDeliveryFee(null);
+            setIsAddressValid(false);
+            showToast(resultado.mensagem, 'error');
+        }
+        setIsCheckingAddress(false);
+    };
+
     const allMenuItems = useMemo(() => {
         switch (activeCategory) {
-            case 'sushi':   return sushiMenu;
+            case 'sushi': return sushiMenu;
             case 'quentes': return kitchenMenu;
             case 'bebidas': return barMenu;
-            default:        return [];
+            default: return [];
         }
     }, [activeCategory]);
 
-    // ✨ Filtro de busca aplicado sobre a categoria ativa
     const menuItems = useMemo(() => {
         if (!searchQuery.trim()) return allMenuItems;
         const q = searchQuery.toLowerCase();
@@ -155,10 +197,9 @@ const DeliveryAppView: React.FC = () => {
         );
     }, [allMenuItems, searchQuery]);
 
-    // ✨ Banner hero dinâmico: bestSeller da categoria ativa
     const featuredItem = useMemo(() =>
         allMenuItems.find(i => i.bestSeller && i.available),
-    [allMenuItems]);
+        [allMenuItems]);
 
     // ─── Cart Actions ────────────────────────────────────────
     const addToCart = (item: MenuItem) => {
@@ -182,12 +223,13 @@ const DeliveryAppView: React.FC = () => {
         setCart(prev => prev.map(p => p.item.id === itemId ? { ...p, obs } : p));
     };
 
-    // ─── Totais ──────────────────────────────────────────────
+    // ─── Totais (Atualizados com Frete Dinâmico) ─────────────
     const subtotal = cart.reduce((acc, p) => acc + p.item.price * p.qty, 0);
     const isFreteFree = appliedCoupon?.code === 'FRETE0';
-    const effectiveDeliveryFee = isFreteFree ? 0 : DELIVERY_FEE;
+
+    // ✨ NOVO: effectiveDeliveryFee usa a taxa dinâmica calculada pelo mapa
+    const effectiveDeliveryFee = isFreteFree ? 0 : (dynamicDeliveryFee ?? 0);
     const discountAmount = appliedCoupon ? subtotal * appliedCoupon.discount : 0;
-    // ✅ FIX: cartTotal já considera desconto — todos os usos devem usar esta var
     const cartTotal = subtotal + effectiveDeliveryFee - discountAmount;
 
     // ─── Cupom ───────────────────────────────────────────────
@@ -203,12 +245,18 @@ const DeliveryAppView: React.FC = () => {
         }
     };
 
-    // Endereço completo como string para o pedido
     const fullAddress = [customerStreet, customerNumber, customerHood].filter(Boolean).join(', ');
 
     // ─── Checkout ────────────────────────────────────────────
     const handleCheckout = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // ✨ NOVO: Bloqueia o pedido se o endereço estiver fora da área ou não verificado (desde que existam zonas cadastradas)
+        if (deliveryZones.length > 0 && !isAddressValid) {
+            showToast('Ops! Seu endereço está fora da nossa área de cobertura.', 'error');
+            return;
+        }
+
         if (!customerName || !customerPhone || !customerStreet || isProcessingCheckout) return;
 
         setIsProcessingCheckout(true);
@@ -247,7 +295,7 @@ const DeliveryAppView: React.FC = () => {
                 taxaEntrega: effectiveDeliveryFee,
                 totalGeral: cartTotal,
                 status: OrderStatus.EM_PREPARO,
-                enderecoEntrega: { rua: customerStreet, numero: customerNumber, bairro: customerHood, cidade: '' },
+                enderecoEntrega: { rua: customerStreet, numero: customerNumber, bairro: customerHood, cidade: 'Bragança Paulista' },
                 createdAt: new Date().toISOString(),
                 clienteNome: customerName,
                 itens: cart.map(c => ({ productId: c.item.id, nome: c.item.name, quantidade: c.qty, precoUnitario: c.item.price }))
@@ -258,11 +306,9 @@ const DeliveryAppView: React.FC = () => {
             setCart([]);
             setCurrentTab('tracking');
             setIsCheckoutOpen(false);
-            // ✅ FIX: toast em vez de alert()
             showToast('Pedido confirmado! Acompanhe o status.', 'success');
         } catch (error) {
             console.error('Erro no checkout:', error);
-            // ✅ FIX: toast em vez de alert()
             showToast('Erro ao processar pedido. Tente novamente.', 'error');
         } finally {
             setIsProcessingCheckout(false);
@@ -279,7 +325,7 @@ const DeliveryAppView: React.FC = () => {
             taxaEntrega: effectiveDeliveryFee,
             totalGeral: cartTotal,
             status: OrderStatus.PAGO,
-            enderecoEntrega: { rua: customerStreet, numero: customerNumber, bairro: customerHood, cidade: '' },
+            enderecoEntrega: { rua: customerStreet, numero: customerNumber, bairro: customerHood, cidade: 'Bragança Paulista' },
             createdAt: new Date().toISOString(),
             clienteNome: customerName,
             itens: cart.map(c => ({ productId: c.item.id, nome: c.item.name, quantidade: c.qty, precoUnitario: c.item.price }))
@@ -311,17 +357,17 @@ const DeliveryAppView: React.FC = () => {
 
     // ── Paleta de cores do tema claro ───────────────────────
     const C = {
-        bg:          'bg-[#f7f3ee]',      // fundo geral creme
-        card:        'bg-white',           // cards dos itens
-        cardBorder:  'border-[#e8e0d6]',  // borda suave
-        headerBg:    'bg-[#f7f3ee]',      // header creme
-        navBg:       'bg-white border-t border-[#e8e0d6]', // bottom nav
-        text:        'text-[#1a1208]',    // texto principal
-        subtext:     'text-[#7a6a5a]',   // texto secundário
-        inputBg:     'bg-white border border-[#ddd5c8]',   // inputs
-        catActive:   'bg-[#1a1208] text-white',
-        catIdle:     'bg-white border border-[#e0d8cf] text-[#7a6a5a] hover:border-[#c9bfb2]',
-        sheetBg:     'bg-white',
+        bg: 'bg-[#f7f3ee]',
+        card: 'bg-white',
+        cardBorder: 'border-[#e8e0d6]',
+        headerBg: 'bg-[#f7f3ee]',
+        navBg: 'bg-white border-t border-[#e8e0d6]',
+        text: 'text-[#1a1208]',
+        subtext: 'text-[#7a6a5a]',
+        inputBg: 'bg-white border border-[#ddd5c8]',
+        catActive: 'bg-[#1a1208] text-white',
+        catIdle: 'bg-white border border-[#e0d8cf] text-[#7a6a5a] hover:border-[#c9bfb2]',
+        sheetBg: 'bg-white',
     };
 
     const renderBody = () => {
@@ -357,7 +403,7 @@ const DeliveryAppView: React.FC = () => {
                                 className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all shrink-0 ${activeCategory === cat.id
                                     ? C.catActive
                                     : C.catIdle
-                                }`}>
+                                    }`}>
                                 {cat.label}
                             </button>
                         ))}
@@ -387,7 +433,7 @@ const DeliveryAppView: React.FC = () => {
                 {/* ── Lista de Produtos (scrollável) ───────── */}
                 <main className={`flex-1 overflow-y-auto px-4 pb-32 custom-scrollbar ${C.bg}`}>
 
-                    {/* ✨ Banner "Mais Pedido" scrollável junto com os itens */}
+                    {/* Banner "Mais Pedido" scrollável junto com os itens */}
                     {featuredItem && !searchQuery && (
                         <div
                             className="relative rounded-2xl overflow-hidden mt-4 mb-5 cursor-pointer group shadow-sm"
@@ -425,7 +471,7 @@ const DeliveryAppView: React.FC = () => {
                                         className={`flex gap-3 border rounded-2xl p-3 transition-all ${!item.available
                                             ? `opacity-40 ${C.cardBorder} ${C.card}`
                                             : `${C.card} ${C.cardBorder} hover:border-primary/40 shadow-sm hover:shadow-md`
-                                        }`}>
+                                            }`}>
                                         <div className="relative shrink-0">
                                             <img src={item.image} alt={item.name}
                                                 className="w-24 h-24 rounded-xl object-cover" />
@@ -489,7 +535,6 @@ const DeliveryAppView: React.FC = () => {
         <div className={`h-full w-full flex justify-center ${C.bg} overflow-hidden font-sans`}>
             <div className={`w-full max-w-[480px] h-full ${C.bg} flex flex-col border-x ${C.cardBorder} mx-auto relative`}>
 
-                {/* ✨ Toast system — aparece no topo */}
                 <Toast messages={toasts} onDismiss={dismissToast} />
 
                 {renderBody()}
@@ -513,7 +558,7 @@ const DeliveryAppView: React.FC = () => {
                     </button>
                 </nav>
 
-                {/* Botão carrinho flutuante — acima da nav */}
+                {/* Botão carrinho flutuante */}
                 {cart.length > 0 && !isCheckoutOpen && currentTab === 'menu' && (
                     <div className="absolute bottom-24 left-4 right-4 z-50 animate-in slide-in-from-bottom-10">
                         <button onClick={() => setIsCheckoutOpen(true)}
@@ -535,9 +580,8 @@ const DeliveryAppView: React.FC = () => {
                         <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setIsCheckoutOpen(false)} />
                         <div className={`${C.sheetBg} w-full rounded-t-[2.5rem] border-t ${C.cardBorder} flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full duration-300 relative z-10`}>
 
-                            {/* Handle bar */}
                             <div className="flex justify-center pt-3 pb-1">
-                                <div className="w-10 h-1 bg-white/10 rounded-full" />
+                                <div className="w-10 h-1 bg-black/10 rounded-full" />
                             </div>
 
                             <div className={`p-6 border-b ${C.cardBorder} flex justify-between items-center shrink-0`}>
@@ -549,9 +593,7 @@ const DeliveryAppView: React.FC = () => {
                             </div>
 
                             <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar space-y-6">
-
-                                {/* Itens com +/- e observações */}
-                                <div className="space-y-5 divide-y divide-white/5">
+                                <div className="space-y-5 divide-y divide-black/5">
                                     {cart.map(entry => (
                                         <div key={entry.item.id} className="pt-4 first:pt-0">
                                             <CartRow
@@ -564,7 +606,6 @@ const DeliveryAppView: React.FC = () => {
                                     ))}
                                 </div>
 
-                                {/* Cupom de desconto */}
                                 <div>
                                     <h3 className={`text-[10px] font-black ${C.subtext} uppercase tracking-widest mb-3`}>Cupom de Desconto</h3>
                                     {appliedCoupon ? (
@@ -600,7 +641,6 @@ const DeliveryAppView: React.FC = () => {
                                     {couponError && <p className="text-[10px] text-rose-500 mt-2 font-bold">{couponError}</p>}
                                 </div>
 
-                                {/* ✨ Formulário de entrega com campos separados */}
                                 <form id="checkout-form" onSubmit={handleCheckout} className="space-y-3">
                                     <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Dados de Entrega</h3>
                                     <input required type="text" placeholder="Nome Completo" value={customerName}
@@ -622,6 +662,14 @@ const DeliveryAppView: React.FC = () => {
                                             className={`w-full ${C.inputBg} rounded-xl px-4 py-3 text-sm ${C.text} outline-none focus:border-primary`} />
                                     </div>
 
+                                    {/* ✨ NOVO: Feedback visual enquanto calcula o frete */}
+                                    {isCheckingAddress && (
+                                        <p className="text-[10px] text-blue-500 font-bold animate-pulse mt-1">
+                                            <span className="material-symbols-outlined text-[10px] align-middle mr-1">location_searching</span>
+                                            Verificando área de entrega...
+                                        </p>
+                                    )}
+
                                     <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest pt-2">Pagamento na Entrega</h3>
                                     <div className="grid grid-cols-3 gap-2">
                                         {([
@@ -634,7 +682,7 @@ const DeliveryAppView: React.FC = () => {
                                                 className={`p-3 rounded-xl flex flex-col items-center gap-1.5 border transition-all ${paymentMethod === pm.id
                                                     ? 'bg-primary/10 border-primary text-primary'
                                                     : `${C.card} ${C.cardBorder} ${C.subtext} hover:border-primary/40`
-                                                }`}>
+                                                    }`}>
                                                 <span className="material-symbols-outlined text-xl">{pm.icon}</span>
                                                 <span className="text-[10px] font-bold uppercase">{pm.label}</span>
                                             </button>
@@ -643,7 +691,7 @@ const DeliveryAppView: React.FC = () => {
                                 </form>
                             </div>
 
-                            {/* Resumo de valores + botão confirmar */}
+                            {/* ✨ NOVO: Resumo de valores com frete dinâmico */}
                             <div className={`px-6 py-5 ${C.card} border-t ${C.cardBorder} shrink-0 space-y-2`}>
                                 <div className={`flex justify-between text-xs ${C.subtext}`}>
                                     <span>Subtotal</span>
@@ -651,8 +699,12 @@ const DeliveryAppView: React.FC = () => {
                                 </div>
                                 <div className={`flex justify-between text-xs ${C.subtext}`}>
                                     <span>Taxa de entrega</span>
-                                    <span className={isFreteFree ? 'text-emerald-600 font-bold' : ''}>
-                                        {isFreteFree ? 'Grátis 🎉' : `R$ ${DELIVERY_FEE.toFixed(2)}`}
+                                    <span className={isFreteFree || dynamicDeliveryFee === 0 ? 'text-emerald-600 font-bold' : (!isAddressValid && customerStreet.length > 5 ? 'text-rose-500 font-bold' : '')}>
+                                        {isFreteFree
+                                            ? 'Grátis 🎉'
+                                            : dynamicDeliveryFee !== null
+                                                ? `R$ ${dynamicDeliveryFee.toFixed(2)}`
+                                                : (customerStreet.length > 5 ? 'Fora da área' : 'Calculando...')}
                                     </span>
                                 </div>
                                 {discountAmount > 0 && (
@@ -665,9 +717,18 @@ const DeliveryAppView: React.FC = () => {
                                     <span className={`${C.subtext} font-black uppercase text-xs`}>Total</span>
                                     <span className={`text-2xl font-black ${C.text} italic`}>R$ {cartTotal.toFixed(2)}</span>
                                 </div>
-                                <button form="checkout-form" type="submit" disabled={isProcessingCheckout}
+
+                                {/* ✨ NOVO: O botão agora verifica o `isAddressValid` para habilitar */}
+                                <button form="checkout-form" type="submit"
+                                    disabled={isProcessingCheckout || (deliveryZones.length > 0 && !isAddressValid) || isCheckingAddress}
                                     className="w-full py-4 bg-primary text-white rounded-2xl font-black uppercase tracking-widest shadow-[0_6px_24px_rgba(230,99,55,0.3)] hover:scale-[1.02] transition-transform mt-1 disabled:opacity-50">
-                                    {isProcessingCheckout ? 'Processando...' : 'Confirmar Pedido'}
+                                    {isCheckingAddress
+                                        ? 'Verificando Endereço...'
+                                        : (deliveryZones.length > 0 && !isAddressValid && customerStreet.length > 5)
+                                            ? 'Endereço Inválido'
+                                            : isProcessingCheckout
+                                                ? 'Processando...'
+                                                : 'Confirmar Pedido'}
                                 </button>
                             </div>
                         </div>
