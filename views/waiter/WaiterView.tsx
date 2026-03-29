@@ -498,7 +498,7 @@ const WaiterView: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+            <div className={`flex-1 overflow-y-auto p-4 custom-scrollbar ${draftItemsCount > 0 ? 'pb-32' : 'pb-8'}`}>
                 <div className="grid grid-cols-2 gap-3">
                     {filteredItems.map(item => (
                         <div
