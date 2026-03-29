@@ -95,10 +95,14 @@ const CartRow: React.FC<{
 };
 
 // ── Componente Principal ────────────────────────────────────
-const DeliveryAppView: React.FC = () => {
+interface DeliveryAppViewProps {
+    onNavigate?: (view: string) => void;
+}
+
+const DeliveryAppView: React.FC<DeliveryAppViewProps> = ({ onNavigate }) => {
     const { addOrder } = useOrders();
     const [activeCategory, setActiveCategory] = useState<'sushi' | 'quentes' | 'bebidas'>('sushi');
-    const [currentTab, setCurrentTab] = useState<'menu' | 'tracking'>('menu');
+    const [currentTab, setCurrentTab] = useState<'menu' | 'tracking' | 'manager' | 'analise'>('menu');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [orderSuccess, setOrderSuccess] = useState(false);
@@ -376,7 +380,7 @@ const DeliveryAppView: React.FC = () => {
         return (
             <>
                 {/* ── Header fixo: logo + categorias + busca ── */}
-                <header className={`px-5 pb-4 pt-10 ${C.headerBg} shrink-0 relative z-10 shadow-sm`}>
+                <header className={`px-5 pb-4 pt-4 ${C.headerBg} shrink-0 relative z-10 shadow-sm`}>
                     <div className="flex justify-between items-center mb-4">
                         <h1 className={`text-2xl font-black italic tracking-tighter ${C.text}`}>
                             SushiFlow<span className="text-primary text-xl">.</span>delivery
@@ -540,7 +544,7 @@ const DeliveryAppView: React.FC = () => {
                 {renderBody()}
 
                 {/* ── Bottom Navigation ────────────────────── */}
-                <nav className={`absolute bottom-0 left-0 right-0 z-40 ${C.navBg} px-8 pt-4 pb-8 flex justify-around`}>
+                <nav className={`absolute bottom-0 left-0 right-0 z-40 ${C.navBg} px-4 pt-3 pb-6 flex justify-around items-start`}>
                     <button onClick={() => setCurrentTab('menu')}
                         className={`flex flex-col items-center gap-1 transition-all relative ${currentTab === 'menu' ? 'text-primary scale-110' : `${C.subtext} hover:text-primary`}`}>
                         <span className="material-symbols-outlined text-2xl">restaurant_menu</span>
@@ -555,6 +559,18 @@ const DeliveryAppView: React.FC = () => {
                         className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'tracking' ? 'text-primary scale-110' : `${C.subtext} hover:text-primary`}`}>
                         <span className="material-symbols-outlined text-2xl">local_shipping</span>
                         <span className="text-[10px] font-black uppercase tracking-widest">Acompanhar</span>
+                    </button>
+                    <button
+                        onClick={() => onNavigate ? onNavigate('delivery_manager') : setCurrentTab('manager')}
+                        className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'manager' ? 'text-primary scale-110' : `${C.subtext} hover:text-primary`}`}>
+                        <span className="material-symbols-outlined text-2xl">store</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">Aproveite</span>
+                    </button>
+                    <button
+                        onClick={() => onNavigate ? onNavigate('admin_dashboard') : setCurrentTab('analise')}
+                        className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'analise' ? 'text-primary scale-110' : `${C.subtext} hover:text-primary`}`}>
+                        <span className="material-symbols-outlined text-2xl">analytics</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">Analisa</span>
                     </button>
                 </nav>
 
@@ -699,12 +715,14 @@ const DeliveryAppView: React.FC = () => {
                                 </div>
                                 <div className={`flex justify-between text-xs ${C.subtext}`}>
                                     <span>Taxa de entrega</span>
-                                    <span className={isFreteFree || dynamicDeliveryFee === 0 ? 'text-emerald-600 font-bold' : (!isAddressValid && customerStreet.length > 5 ? 'text-rose-500 font-bold' : '')}>
+                                    <span className={isFreteFree || dynamicDeliveryFee === 0 ? 'text-emerald-600 font-bold' : ''}>
                                         {isFreteFree
                                             ? 'Grátis 🎉'
-                                            : dynamicDeliveryFee !== null
-                                                ? `R$ ${dynamicDeliveryFee.toFixed(2)}`
-                                                : (customerStreet.length > 5 ? 'Fora da área' : 'Calculando...')}
+                                            : deliveryZones.length === 0
+                                                ? 'A definir'
+                                                : dynamicDeliveryFee !== null
+                                                    ? `R$ ${dynamicDeliveryFee.toFixed(2)}`
+                                                    : (customerStreet.length > 5 ? 'Calculando...' : '—')}
                                     </span>
                                 </div>
                                 {discountAmount > 0 && (

@@ -65,12 +65,23 @@ const AppContent: React.FC = () => {
       case 'equipe': return <TeamManagement />;
       case 'cmv': return <CMVView />;
       case 'garcom': return <WaiterView />;
-      case 'delivery_app': return <DeliveryAppView />;
+      case 'delivery_app': return <DeliveryAppView onNavigate={setActiveView} />;
       case 'delivery_manager': return <DeliveryManagerView />;
       case 'driver_app': return <DriverAppView />;
       default: return <DashboardView />;
     }
   };
+
+  // Views de app mobile renderizam em tela cheia, sem Sidebar/Header do admin
+  const isFullScreenApp = activeView === 'delivery_app' || activeView === 'driver_app';
+
+  if (isFullScreenApp) {
+    return (
+      <div className="h-screen w-screen overflow-hidden">
+        {renderContent()}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background-dark text-slate-100 overflow-hidden font-sans">
