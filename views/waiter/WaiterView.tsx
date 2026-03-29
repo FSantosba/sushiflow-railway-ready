@@ -187,7 +187,9 @@ const WaiterView: React.FC = () => {
     };
 
     // ─── 1. Visão Geral do Salão ─────────────────────────────────────────────────
-    const TabMesas = () => {
+    // FIX: era `const TabMesas = () =>` (componente inline) — causava re-mount a cada render.
+    // Agora é uma função render chamada diretamente, sem criar tipo de componente novo.
+    const renderMesas = () => {
         const sortedTables = [...tables].sort((a, b) => {
             if (a.status === TableStatus.OCCUPIED && b.status !== TableStatus.OCCUPIED) return -1;
             if (a.status !== TableStatus.OCCUPIED && b.status === TableStatus.OCCUPIED) return 1;
@@ -275,7 +277,16 @@ const WaiterView: React.FC = () => {
     };
 
     // ─── 2. Comanda com Atalhos Rápidos 4×2 ────────────────────────────────────
-    const TabComanda = () => {
+    const renderComanda = () => {
+        // Guarda: redireciona para a aba de mesas se nenhuma mesa está selecionada válida
+        if (!activeTable) {
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-background-dark opacity-50">
+                    <span className="material-symbols-outlined text-6xl">table_restaurant</span>
+                    <p className="text-sm font-black uppercase tracking-widest text-center">Selecione uma mesa<br/><span className="text-xs opacity-60">Volte para a aba Salão</span></p>
+                </div>
+            );
+        }
         const oldest = currentCart.reduce((min, i) => {
             const ts = (i as any).createdAt || now;
             return ts < min ? ts : min;
@@ -450,7 +461,7 @@ const WaiterView: React.FC = () => {
     };
 
     // ─── 3. Cardápio Completo (1-toque lança direto) ────────────────────────────
-    const TabCardapio = () => (
+    const renderCardapio = () => (
         <div className="flex-1 flex flex-col overflow-hidden bg-background-dark">
             <div className="px-4 py-4 bg-card-dark border-b border-white/10 space-y-4 shadow-md z-10">
                 <div className="flex justify-between items-center">
@@ -526,7 +537,7 @@ const WaiterView: React.FC = () => {
     );
 
     // ─── 4. Alertas ─────────────────────────────────────────────────────────────
-    const TabAlertas = () => (
+    const renderAlertas = () => (
         <div className="flex-1 overflow-y-auto p-4 bg-background-dark">
             {readyByTable.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center gap-4 opacity-20 py-20">
@@ -611,10 +622,10 @@ const WaiterView: React.FC = () => {
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col overflow-hidden">
-                {activeTab === 'mesas' && <TabMesas />}
-                {activeTab === 'comanda' && <TabComanda />}
-                {activeTab === 'cardapio' && <TabCardapio />}
-                {activeTab === 'alertas' && <TabAlertas />}
+                {activeTab === 'mesas' && renderMesas()}
+                {activeTab === 'comanda' && renderComanda()}
+                {activeTab === 'cardapio' && renderCardapio()}
+                {activeTab === 'alertas' && renderAlertas()}
             </div>
 
             {/* Bottom Navigation */}

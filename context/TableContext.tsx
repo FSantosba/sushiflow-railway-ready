@@ -102,9 +102,13 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     const addItemToTable = (tableId: string, item: MenuItem, notes?: string) => {
+        // Bug fix: nunca chamar setTables() dentro de setOpenTables() — causa batches incorretos.
+        // Primeiro calculamos se a mesa está livre ANTES de qualquer setState.
+        const table = tables.find(t => t.id === tableId);
+        const needsOpen = table && table.status === TableStatus.FREE;
+
         setOpenTables(prev => {
             const tableCart = prev[tableId] || [];
-            // Se não tiver notas, agrupa com item existente
             const existingItemIndex = !notes
                 ? tableCart.findIndex(i => i.menuItemId === item.id && i.status === 'DRAFT' && !i.notes)
                 : -1;
@@ -125,17 +129,17 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     createdAt: Date.now(),
                 }];
             }
-
-            // Atualizar status da mesa
-            const table = tables.find(t => t.id === tableId);
-            if (table && table.status === TableStatus.FREE) {
-                setTables(prevTables => prevTables.map(t =>
-                    t.id === tableId ? { ...t, status: TableStatus.OCCUPIED, timeActive: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) } : t
-                ));
-            }
-
             return { ...prev, [tableId]: newCart };
         });
+
+        // setState separado, fora do setter de openTables
+        if (needsOpen) {
+            setTables(prevTables => prevTables.map(t =>
+                t.id === tableId
+                    ? { ...t, status: TableStatus.OCCUPIED, timeActive: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+                    : t
+            ));
+        }
     };
 
     const updateItemQuantity = (tableId: string, itemId: string, delta: number) => {
@@ -194,16 +198,15 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     const moveTableItems = (fromId: string, toId: string) => {
-        const items = openTables[fromId] || [];
-        if (items.length === 0) return;
-        // Move cart to target table
+        // Bug fix: não ler openTables diretamente (closure stale). Usar setter funcional.
         setOpenTables(prev => {
+            const items = prev[fromId] || [];
+            if (items.length === 0) return prev;
             const next = { ...prev };
             next[toId] = [...(prev[toId] || []), ...items];
             delete next[fromId];
             return next;
         });
-        // Update table statuses
         setTables(prev => prev.map(t => {
             if (t.id === fromId) return { ...t, status: TableStatus.FREE, timeActive: undefined, currentTotal: undefined };
             if (t.id === toId) return { ...t, status: TableStatus.OCCUPIED, timeActive: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
