@@ -127,6 +127,7 @@ const WaiterView: React.FC = () => {
         if (!item.available) return;
         addItemToTable(activeTableId, item, undefined);
         if (navigator.vibrate) navigator.vibrate(50);
+        showToast(`✅ ${item.name} adicionado!`, 'success');
     };
 
     // Open notes sheet (from long-press or menu icon)
@@ -147,6 +148,7 @@ const WaiterView: React.FC = () => {
     const confirmAdd = () => {
         if (!pendingItem) return;
         addItemToTable(activeTableId, pendingItem, noteText.trim() || undefined);
+        showToast(`✅ ${pendingItem.name} adicionado!`, 'success');
         setPendingItem(null);
         setNoteText('');
     };
@@ -331,12 +333,12 @@ const WaiterView: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-4 gap-2">
                             {TOP_ITEMS.map((item, idx) => (
-                                <button
+                                <div
                                     key={`top-${idx}`}
                                     onClick={() => handleInstantAdd(item)}
+                                    role="button"
                                     onContextMenu={e => { e.preventDefault(); handleOpenNotes(item); }}
-                                    className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border active:scale-90 transition-all ${!item.available ? 'opacity-30 grayscale' : 'bg-card-dark border-white/10 hover:border-primary/50 active:bg-white/10'}`}
-                                    disabled={!item.available}
+                                    className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border cursor-pointer active:scale-90 transition-all ${!item.available ? 'opacity-30 grayscale' : 'bg-card-dark border-white/10 hover:border-primary/50 active:bg-white/10'}`}
                                     title={item.name}
                                 >
                                     <div className="w-full aspect-square rounded-lg overflow-hidden bg-black/40">
@@ -347,11 +349,11 @@ const WaiterView: React.FC = () => {
                                     {/* Note button overlay */}
                                     <button
                                         onClick={e => { e.stopPropagation(); handleOpenNotes(item); }}
-                                        className="absolute top-1 right-1 size-4 bg-black/60 rounded-full flex items-center justify-center"
+                                        className="absolute top-1 right-1 size-4 bg-black/60 rounded-full flex items-center justify-center cursor-pointer"
                                     >
                                         <span className="material-symbols-outlined text-[9px] text-slate-400">edit_note</span>
                                     </button>
-                                </button>
+                                </div>
                             ))}
                         </div>
                     </div>
@@ -497,11 +499,11 @@ const WaiterView: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                 <div className="grid grid-cols-2 gap-3">
                     {filteredItems.map(item => (
-                        <button
+                        <div
                             key={item.id}
                             onClick={() => handleInstantAdd(item)}
-                            disabled={!item.available}
-                            className={`bg-card-dark border border-white/5 rounded-3xl p-3 flex flex-col gap-2 text-left active:scale-[0.95] transition-all relative overflow-hidden shadow-lg ${!item.available ? 'opacity-40 grayscale' : 'hover:border-primary/50'}`}
+                            role="button"
+                            className={`bg-card-dark border border-white/5 rounded-3xl p-3 flex flex-col gap-2 cursor-pointer text-left active:scale-[0.95] transition-all relative overflow-hidden shadow-lg ${!item.available ? 'opacity-40 grayscale pointer-events-none' : 'hover:border-primary/50'}`}
                         >
                             {item.bestSeller && (
                                 <span className="absolute top-3 left-3 px-2 py-1 bg-primary text-white text-[9px] font-black uppercase tracking-widest rounded-lg z-10 shadow-md">Top</span>
@@ -516,14 +518,14 @@ const WaiterView: React.FC = () => {
                                     {/* Notes button */}
                                     <button
                                         onClick={e => { e.stopPropagation(); handleOpenNotes(item); }}
-                                        className="size-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/15 transition-colors"
+                                        className="size-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/15 cursor-pointer transition-colors"
                                         title="Adicionar observação"
                                     >
                                         <span className="material-symbols-outlined text-[13px] text-slate-400">edit_note</span>
                                     </button>
                                 </div>
                             </div>
-                        </button>
+                        </div>
                     ))}
                     {filteredItems.length === 0 && (
                         <div className="col-span-2 py-20 flex flex-col items-center text-slate-600">
