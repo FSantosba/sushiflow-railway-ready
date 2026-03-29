@@ -102,7 +102,7 @@ interface DeliveryAppViewProps {
 const DeliveryAppView: React.FC<DeliveryAppViewProps> = ({ onNavigate }) => {
     const { addOrder } = useOrders();
     const [activeCategory, setActiveCategory] = useState<'sushi' | 'quentes' | 'bebidas'>('sushi');
-    const [currentTab, setCurrentTab] = useState<'menu' | 'tracking' | 'manager' | 'analise'>('menu');
+    const [currentTab, setCurrentTab] = useState<'menu' | 'tracking'>('menu');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [orderSuccess, setOrderSuccess] = useState(false);
@@ -379,63 +379,69 @@ const DeliveryAppView: React.FC<DeliveryAppViewProps> = ({ onNavigate }) => {
 
         return (
             <>
-                {/* ── Header fixo: logo + categorias + busca ── */}
-                <header className={`px-5 pb-4 pt-4 ${C.headerBg} shrink-0 relative z-10 shadow-sm`}>
-                    <div className="flex justify-between items-center mb-4">
-                        <h1 className={`text-2xl font-black italic tracking-tighter ${C.text}`}>
-                            SushiFlow<span className="text-primary text-xl">.</span>delivery
-                        </h1>
-                        <div className="flex items-center gap-2">
-                            <span className={`px-3 py-1 bg-[#ede8e0] rounded-full text-[10px] font-black ${C.subtext} flex items-center gap-1`}>
-                                <span className="material-symbols-outlined text-xs text-orange-500">schedule</span>
-                                35–45 min
-                            </span>
-                            <span className="px-3 py-1 bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] font-black uppercase tracking-widest rounded-full flex items-center gap-1">
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Aberto
+                {/* ── Header estilo GloriaFood ── */}
+                <header className={`${C.headerBg} shrink-0 relative z-10`}>
+                    {/* Banner do restaurante */}
+                    <div className="relative h-28 bg-gradient-to-br from-[#1a1208] to-[#3a2a18] overflow-hidden">
+                        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 70% 50%, #e66337 0%, transparent 60%)' }} />
+                        <div className="absolute inset-0 px-5 flex items-center justify-between">
+                            <div>
+                                <h1 className="text-2xl font-black italic tracking-tighter text-white">
+                                    SushiFlow<span className="text-primary">.</span>
+                                </h1>
+                                <p className="text-[11px] text-white/60 font-bold uppercase tracking-widest">Delivery Premium</p>
+                                <div className="flex items-center gap-3 mt-2">
+                                    <span className="flex items-center gap-1 text-[10px] text-white/80 font-bold">
+                                        <span className="material-symbols-outlined text-xs text-orange-400">schedule</span>
+                                        35–45 min
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[10px] text-white/80 font-bold">
+                                        <span className="material-symbols-outlined text-xs text-orange-400">delivery_dining</span>
+                                        Grátis acima R$80
+                                    </span>
+                                </div>
+                            </div>
+                            <span className="px-3 py-1.5 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full flex items-center gap-1.5 shadow-lg">
+                                <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Aberto
                             </span>
                         </div>
                     </div>
 
-                    {/* Categorias */}
-                    <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1 mb-3">
-                        {([
-                            { id: 'sushi', label: '🍣 Sushi Bar' },
-                            { id: 'quentes', label: '🔥 Pratos Quentes' },
-                            { id: 'bebidas', label: '🍶 Bebidas' },
-                        ] as const).map(cat => (
-                            <button key={cat.id} onClick={() => { setActiveCategory(cat.id); setSearchQuery(''); }}
-                                className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all shrink-0 ${activeCategory === cat.id
-                                    ? C.catActive
-                                    : C.catIdle
-                                    }`}>
-                                {cat.label}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Busca */}
-                    <div className="relative">
-                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#a89888] text-base pointer-events-none">search</span>
-                        <input
-                            type="text"
-                            placeholder="Buscar no cardápio..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className={`w-full ${C.inputBg} rounded-full pl-9 pr-4 py-2.5 text-sm ${C.text} outline-none focus:border-primary/60 placeholder:text-[#b0a090] transition-colors`}
-                        />
-                        {searchQuery && (
-                            <button
-                                onClick={() => setSearchQuery('')}
-                                className={`absolute right-3 top-1/2 -translate-y-1/2 ${C.subtext} hover:text-primary transition-colors`}
-                            >
-                                <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                        )}
+                    {/* Busca + Categorias coladas abaixo do banner */}
+                    <div className={`px-4 pt-3 pb-2 ${C.headerBg} shadow-sm`}>
+                        <div className="relative mb-3">
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#a89888] text-base pointer-events-none">search</span>
+                            <input
+                                type="text"
+                                placeholder="Buscar no cardápio..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className={`w-full ${C.inputBg} rounded-full pl-9 pr-4 py-2 text-sm ${C.text} outline-none focus:border-primary/60 placeholder:text-[#b0a090] transition-colors`}
+                            />
+                            {searchQuery && (
+                                <button onClick={() => setSearchQuery('')}
+                                    className={`absolute right-3 top-1/2 -translate-y-1/2 ${C.subtext} hover:text-primary transition-colors`}>
+                                    <span className="material-symbols-outlined text-sm">close</span>
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
+                            {([
+                                { id: 'sushi', label: '🍣 Sushi Bar' },
+                                { id: 'quentes', label: '🔥 Pratos Quentes' },
+                                { id: 'bebidas', label: '🍶 Bebidas' },
+                            ] as const).map(cat => (
+                                <button key={cat.id} onClick={() => { setActiveCategory(cat.id); setSearchQuery(''); }}
+                                    className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest transition-all shrink-0 ${activeCategory === cat.id ? C.catActive : C.catIdle}`}>
+                                    {cat.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </header>
 
                 {/* ── Lista de Produtos (scrollável) ───────── */}
-                <main className={`flex-1 overflow-y-auto px-4 pb-32 custom-scrollbar ${C.bg}`}>
+                <main className={`flex-1 overflow-y-auto px-4 pb-24 custom-scrollbar ${C.bg}`}>
 
                     {/* Banner "Mais Pedido" scrollável junto com os itens */}
                     {featuredItem && !searchQuery && (
@@ -543,40 +549,33 @@ const DeliveryAppView: React.FC<DeliveryAppViewProps> = ({ onNavigate }) => {
 
                 {renderBody()}
 
-                {/* ── Bottom Navigation ────────────────────── */}
-                <nav className={`absolute bottom-0 left-0 right-0 z-40 ${C.navBg} px-4 pt-3 pb-6 flex justify-around items-start`}>
+                {/* ── Bottom Navigation (GloriaFood style) ── */}
+                <nav className={`absolute bottom-0 left-0 right-0 z-40 ${C.navBg} flex`}>
                     <button onClick={() => setCurrentTab('menu')}
-                        className={`flex flex-col items-center gap-1 transition-all relative ${currentTab === 'menu' ? 'text-primary scale-110' : `${C.subtext} hover:text-primary`}`}>
+                        className={`flex-1 flex flex-col items-center gap-0.5 py-3 pb-5 transition-all relative border-t-2 ${
+                            currentTab === 'menu' ? 'border-primary text-primary' : `border-transparent ${C.subtext}`
+                        }`}>
                         <span className="material-symbols-outlined text-2xl">restaurant_menu</span>
                         <span className="text-[10px] font-black uppercase tracking-widest">Cardápio</span>
                         {cartCount > 0 && (
-                            <span className="absolute -top-1 -right-3 min-w-[18px] h-[18px] bg-primary text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 shadow-[0_2px_8px_rgba(230,99,55,0.5)]">
+                            <span className="absolute top-2 right-[calc(50%-22px)] min-w-[18px] h-[18px] bg-primary text-white text-[9px] font-black rounded-full flex items-center justify-center px-1">
                                 {cartCount}
                             </span>
                         )}
                     </button>
                     <button onClick={() => setCurrentTab('tracking')}
-                        className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'tracking' ? 'text-primary scale-110' : `${C.subtext} hover:text-primary`}`}>
+                        className={`flex-1 flex flex-col items-center gap-0.5 py-3 pb-5 transition-all border-t-2 ${
+                            currentTab === 'tracking' ? 'border-primary text-primary' : `border-transparent ${C.subtext}`
+                        }`}>
                         <span className="material-symbols-outlined text-2xl">local_shipping</span>
-                        <span className="text-[10px] font-black uppercase tracking-widest">Acompanhar</span>
-                    </button>
-                    <button
-                        onClick={() => onNavigate ? onNavigate('delivery_manager') : setCurrentTab('manager')}
-                        className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'manager' ? 'text-primary scale-110' : `${C.subtext} hover:text-primary`}`}>
-                        <span className="material-symbols-outlined text-2xl">store</span>
-                        <span className="text-[10px] font-black uppercase tracking-widest">Aproveite</span>
-                    </button>
-                    <button
-                        onClick={() => onNavigate ? onNavigate('admin_dashboard') : setCurrentTab('analise')}
-                        className={`flex flex-col items-center gap-1 transition-all ${currentTab === 'analise' ? 'text-primary scale-110' : `${C.subtext} hover:text-primary`}`}>
-                        <span className="material-symbols-outlined text-2xl">analytics</span>
-                        <span className="text-[10px] font-black uppercase tracking-widest">Analisa</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">Meu Pedido</span>
                     </button>
                 </nav>
 
                 {/* Botão carrinho flutuante */}
                 {cart.length > 0 && !isCheckoutOpen && currentTab === 'menu' && (
-                    <div className="absolute bottom-24 left-4 right-4 z-50 animate-in slide-in-from-bottom-10">
+
+                    <div className="absolute bottom-[72px] left-4 right-4 z-50 animate-in slide-in-from-bottom-10">
                         <button onClick={() => setIsCheckoutOpen(true)}
                             className="w-full bg-primary text-white rounded-2xl p-4 flex items-center justify-between shadow-[0_8px_32px_rgba(230,99,55,0.35)] hover:scale-[1.02] transition-transform">
                             <div className="flex items-center gap-3">
