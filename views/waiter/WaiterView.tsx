@@ -93,6 +93,8 @@ const WaiterView: React.FC = () => {
     const serviceFee = currentTotal * 0.1;
     const grandTotal = currentTotal + serviceFee;
     const hasDrafts = currentCart.some(i => i.status === 'DRAFT');
+    const draftItemsCount = currentCart.filter(i => i.status === 'DRAFT').reduce((acc, curr) => acc + curr.qty, 0);
+    const draftItemsValue = currentCart.filter(i => i.status === 'DRAFT').reduce((acc, curr) => acc + (curr.qty * curr.price), 0);
     const readyItems = currentCart.filter(i => i.status === 'READY');
 
     const freeTables = useMemo(() =>
@@ -535,6 +537,26 @@ const WaiterView: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* CARRINHO FLUTUANTE DE ITENS NÃO ENVIADOS (DRAFTS) */}
+            {draftItemsCount > 0 && (
+                <div 
+                    onClick={() => setActiveTab('comanda')}
+                    className="absolute bottom-4 left-4 right-4 bg-primary text-white rounded-2xl shadow-xl shadow-primary/40 flex items-center justify-between p-4 cursor-pointer active:scale-[0.98] transition-all z-50 border border-white/20 animate-in slide-in-from-bottom-5"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <span className="material-symbols-outlined text-3xl font-black">shopping_cart_checkout</span>
+                            <div className="absolute -top-1 -right-2 bg-white text-primary text-[10px] font-black size-5 rounded-full flex items-center justify-center shadow-md border border-primary/20">{draftItemsCount}</div>
+                        </div>
+                        <div className="flex flex-col">
+                            <h3 className="text-sm font-black uppercase tracking-widest leading-none">Ver Comanda</h3>
+                            <p className="text-xs font-bold text-white/80 mt-0.5">R$ {draftItemsValue.toFixed(2)} &#8226; Enviar para cozinha</p>
+                        </div>
+                    </div>
+                    <span className="material-symbols-outlined text-white">chevron_right</span>
+                </div>
+            )}
         </div>
     );
 
@@ -595,11 +617,11 @@ const WaiterView: React.FC = () => {
         </div>
     );
 
-    const tabs: { id: TabId; icon: string; label: string; badge?: number }[] = [
+    const tabs: { id: TabId; icon: string; label: string; badge?: number; badgeColor?: string }[] = [
         { id: 'mesas', icon: 'grid_view', label: 'Salão' },
-        { id: 'comanda', icon: 'receipt_long', label: 'Comanda', badge: readyItems.length > 0 ? readyItems.length : undefined },
+        { id: 'comanda', icon: 'receipt_long', label: 'Comanda', badge: draftItemsCount > 0 ? draftItemsCount : undefined, badgeColor: 'bg-primary' },
         { id: 'cardapio', icon: 'restaurant_menu', label: 'Cardápio' },
-        { id: 'alertas', icon: 'notifications', label: 'Alertas', badge: notifyReadyCount > 0 ? notifyReadyCount : undefined },
+        { id: 'alertas', icon: 'notifications', label: 'Alertas', badge: notifyReadyCount > 0 ? notifyReadyCount : undefined, badgeColor: 'bg-emerald-500' },
     ];
 
     return (
@@ -645,7 +667,7 @@ const WaiterView: React.FC = () => {
                                 className={`flex-1 flex flex-col items-center gap-1.5 py-3 px-2 relative transition-all duration-300 ${isActive ? 'text-primary' : 'text-slate-500 hover:text-slate-300'}`}
                             >
                                 {tab.badge !== undefined && tab.badge > 0 && (
-                                    <span className="absolute top-1.5 right-[25%] translate-x-2 size-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center shadow-lg border-2 border-[#0d1317] animate-pulse">
+                                    <span className={`absolute top-1.5 right-[25%] translate-x-2 size-5 rounded-full ${tab.badgeColor || 'bg-rose-500'} text-white text-[10px] font-black flex items-center justify-center shadow-lg border-2 border-[#0d1317] animate-pulse`}>
                                         {tab.badge > 9 ? '9+' : tab.badge}
                                     </span>
                                 )}
