@@ -378,72 +378,68 @@ const DeliveryAppView: React.FC<DeliveryAppViewProps> = ({ onNavigate }) => {
         if (currentTab === 'tracking') return <CustomerTrackingView />;
 
         return (
-            <>
-                {/* ── Header estilo GloriaFood ── */}
-                <header className={`${C.headerBg} shrink-0 relative z-10`}>
-                    {/* Banner do restaurante */}
-                    <div className="relative h-28 bg-gradient-to-br from-[#1a1208] to-[#3a2a18] overflow-hidden">
-                        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 70% 50%, #e66337 0%, transparent 60%)' }} />
-                        <div className="absolute inset-0 px-5 flex items-center justify-between">
-                            <div>
-                                <h1 className="text-2xl font-black italic tracking-tighter text-white">
-                                    SushiFlow<span className="text-primary">.</span>
-                                </h1>
-                                <p className="text-[11px] text-white/60 font-bold uppercase tracking-widest">Delivery Premium</p>
-                                <div className="flex items-center gap-3 mt-2">
-                                    <span className="flex items-center gap-1 text-[10px] text-white/80 font-bold">
-                                        <span className="material-symbols-outlined text-xs text-orange-400">schedule</span>
-                                        35–45 min
-                                    </span>
-                                    <span className="flex items-center gap-1 text-[10px] text-white/80 font-bold">
-                                        <span className="material-symbols-outlined text-xs text-orange-400">delivery_dining</span>
-                                        Grátis acima R$80
-                                    </span>
-                                </div>
+            <main className={`flex-1 overflow-y-auto pb-24 custom-scrollbar ${C.bg}`}>
+
+                {/* Banner do restaurante (rola junto) */}
+                <div className="relative h-28 bg-gradient-to-br from-[#1a1208] to-[#3a2a18] overflow-hidden">
+                    <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 70% 50%, #e66337 0%, transparent 60%)' }} />
+                    <div className="absolute inset-0 px-5 flex items-center justify-between">
+                        <div>
+                            <h1 className="text-2xl font-black italic tracking-tighter text-white">
+                                SushiFlow<span className="text-primary">.</span>
+                            </h1>
+                            <p className="text-[11px] text-white/60 font-bold uppercase tracking-widest">Delivery Premium</p>
+                            <div className="flex items-center gap-3 mt-2">
+                                <span className="flex items-center gap-1 text-[10px] text-white/80 font-bold">
+                                    <span className="material-symbols-outlined text-xs text-orange-400">schedule</span>
+                                    35–45 min
+                                </span>
+                                <span className="flex items-center gap-1 text-[10px] text-white/80 font-bold">
+                                    <span className="material-symbols-outlined text-xs text-orange-400">delivery_dining</span>
+                                    Grátis acima R$80
+                                </span>
                             </div>
-                            <span className="px-3 py-1.5 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full flex items-center gap-1.5 shadow-lg">
-                                <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Aberto
-                            </span>
                         </div>
+                        <span className="px-3 py-1.5 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full flex items-center gap-1.5 shadow-lg">
+                            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Aberto
+                        </span>
                     </div>
+                </div>
 
-                    {/* Busca + Categorias coladas abaixo do banner */}
-                    <div className={`px-4 pt-3 pb-2 ${C.headerBg} shadow-sm`}>
-                        <div className="relative mb-3">
-                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#a89888] text-base pointer-events-none">search</span>
-                            <input
-                                type="text"
-                                placeholder="Buscar no cardápio..."
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                className={`w-full ${C.inputBg} rounded-full pl-9 pr-4 py-2 text-sm ${C.text} outline-none focus:border-primary/60 placeholder:text-[#b0a090] transition-colors`}
-                            />
-                            {searchQuery && (
-                                <button onClick={() => setSearchQuery('')}
-                                    className={`absolute right-3 top-1/2 -translate-y-1/2 ${C.subtext} hover:text-primary transition-colors`}>
-                                    <span className="material-symbols-outlined text-sm">close</span>
-                                </button>
-                            )}
-                        </div>
-                        <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
-                            {([
-                                { id: 'sushi', label: '🍣 Sushi Bar' },
-                                { id: 'quentes', label: '🔥 Pratos Quentes' },
-                                { id: 'bebidas', label: '🍶 Bebidas' },
-                            ] as const).map(cat => (
-                                <button key={cat.id} onClick={() => { setActiveCategory(cat.id); setSearchQuery(''); }}
-                                    className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest transition-all shrink-0 ${activeCategory === cat.id ? C.catActive : C.catIdle}`}>
-                                    {cat.label}
-                                </button>
-                            ))}
-                        </div>
+                {/* Busca + Categorias (rola junto) */}
+                <div className={`px-4 pt-3 pb-2 ${C.headerBg} shadow-sm`}>
+                    <div className="relative mb-3">
+                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#a89888] text-base pointer-events-none">search</span>
+                        <input
+                            type="text"
+                            placeholder="Buscar no cardápio..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className={`w-full ${C.inputBg} rounded-full pl-9 pr-4 py-2 text-sm ${C.text} outline-none focus:border-primary/60 placeholder:text-[#b0a090] transition-colors`}
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery('')}
+                                className={`absolute right-3 top-1/2 -translate-y-1/2 ${C.subtext} hover:text-primary transition-colors`}>
+                                <span className="material-symbols-outlined text-sm">close</span>
+                            </button>
+                        )}
                     </div>
-                </header>
+                    <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
+                        {([
+                            { id: 'sushi', label: '🍣 Sushi Bar' },
+                            { id: 'quentes', label: '🔥 Pratos Quentes' },
+                            { id: 'bebidas', label: '🍶 Bebidas' },
+                        ] as const).map(cat => (
+                            <button key={cat.id} onClick={() => { setActiveCategory(cat.id); setSearchQuery(''); }}
+                                className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest transition-all shrink-0 ${activeCategory === cat.id ? C.catActive : C.catIdle}`}>
+                                {cat.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
 
-                {/* ── Lista de Produtos (scrollável) ───────── */}
-                <main className={`flex-1 overflow-y-auto px-4 pb-24 custom-scrollbar ${C.bg}`}>
-
-                    {/* Banner "Mais Pedido" scrollável junto com os itens */}
+                {/* Itens do cardápio */}
+                <div className="px-4">
                     {featuredItem && !searchQuery && (
                         <div
                             className="relative rounded-2xl overflow-hidden mt-4 mb-5 cursor-pointer group shadow-sm"
@@ -536,8 +532,8 @@ const DeliveryAppView: React.FC<DeliveryAppViewProps> = ({ onNavigate }) => {
                             })}
                         </div>
                     )}
-                </main>
-            </>
+                </div>
+            </main>
         );
     };
 
