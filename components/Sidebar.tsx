@@ -27,7 +27,8 @@ const menuItems = [
     { id: 'cmv', label: 'Gest\u00e3o CMV', icon: 'price_check', roles: ['manager'] },
     { id: 'financeiro', label: 'Financeiro (Antigo)', icon: 'bar_chart', roles: ['manager'] },
     { id: 'equipe', label: 'Equipe', icon: 'groups', roles: ['manager'] },
-    { id: 'impressao', label: 'Impressoras', icon: 'print', roles: ['manager'] },
+    { id: 'impressao', label: 'Impressoras (Legacy)', icon: 'print', roles: ['manager'] },
+    { id: 'servidor', label: 'Servidor & Impressoras', icon: 'dns', roles: ['manager'] },
 ];
 
 const ROLE_LABELS: Record<string, string> = {

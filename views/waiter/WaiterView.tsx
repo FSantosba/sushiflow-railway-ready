@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTables } from '../../context/TableContext';
+import { useServer } from '../../context/ServerContext';
 import { sushiMenu, barMenu, kitchenMenu } from '../../utils/mockData';
 import { MenuItem, TableStatus } from '../../types';
 
 const ALL_ITEMS = [...sushiMenu, ...kitchenMenu, ...barMenu];
-const TOP_ITEMS = ALL_ITEMS.filter(item => item.bestSeller).slice(0, 8);
 
 const QUICK_NOTES = [
     "Sem cebolinha",
@@ -35,26 +35,24 @@ const WaiterView: React.FC = () => {
         notifyReadyCount, clearReadyNotifications, moveTableItems,
     } = useTables();
 
+    const { isOnline, sendOrder, pendingQueueCount } = useServer();
+    const currentUser = (window as any).__sushiCurrentUser || { name: 'Garçom' };
+
     const [activeTab, setActiveTab] = useState<TabId>('mesas');
     const [category, setCategory] = useState<Category>('all');
     const [search, setSearch] = useState('');
+    const [showSearch, setShowSearch] = useState(false); // ✨ Novo estado da Lupa
 
-    // Item notes modal (only opened by long-press or "+" icon)
     const [pendingItem, setPendingItem] = useState<MenuItem | null>(null);
     const [noteText, setNoteText] = useState('');
 
-    // Checkout flow
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [paymentStep, setPaymentStep] = useState<'summary' | 'processing' | 'success'>('summary');
     const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
 
-    // Async send state
     const [isSending, setIsSending] = useState(false);
-
-    // Switch Table modal
     const [isSwitchTableOpen, setIsSwitchTableOpen] = useState(false);
 
-    // Toasts
     const [globalToast, setGlobalToast] = useState<{ message: string; type: 'info' | 'success'; id: number } | null>(null);
     const prevNotifyCount = useRef(notifyReadyCount);
 
@@ -64,14 +62,12 @@ const WaiterView: React.FC = () => {
         setTimeout(() => setGlobalToast(c => c?.id === id ? null : c), 3500);
     }, []);
 
-    // Timer
     const [now, setNow] = useState(Date.now());
     useEffect(() => {
         const t = setInterval(() => setNow(Date.now()), 1000);
         return () => clearInterval(t);
     }, []);
 
-    // Ready notifications toast
     useEffect(() => {
         if (notifyReadyCount > prevNotifyCount.current) {
             showToast('🔔 Pratos prontos na cozinha!', 'info');
@@ -95,7 +91,6 @@ const WaiterView: React.FC = () => {
     const hasDrafts = currentCart.some(i => i.status === 'DRAFT');
     const draftItemsCount = currentCart.filter(i => i.status === 'DRAFT').reduce((acc, curr) => acc + curr.qty, 0);
     const draftItemsValue = currentCart.filter(i => i.status === 'DRAFT').reduce((acc, curr) => acc + (curr.qty * curr.price), 0);
-    const readyItems = currentCart.filter(i => i.status === 'READY');
 
     const freeTables = useMemo(() =>
         tables.filter(t => t.status === TableStatus.FREE && t.id !== activeTableId),
@@ -124,7 +119,6 @@ const WaiterView: React.FC = () => {
         setActiveTab('comanda');
     };
 
-    // Instant 1-tap add (no confirmation)
     const handleInstantAdd = (item: MenuItem) => {
         if (!item.available) return;
         addItemToTable(activeTableId, item, undefined);
@@ -132,7 +126,6 @@ const WaiterView: React.FC = () => {
         showToast(`✅ ${item.name} adicionado!`, 'success');
     };
 
-    // Open notes sheet (from long-press or menu icon)
     const handleOpenNotes = (item: MenuItem) => {
         if (!item.available) return;
         setPendingItem(item);
@@ -150,30 +143,43 @@ const WaiterView: React.FC = () => {
     const confirmAdd = () => {
         if (!pendingItem) return;
         addItemToTable(activeTableId, pendingItem, noteText.trim() || undefined);
-        showToast(`✅ ${pendingItem.name} adicionado!`, 'success');
+        showToast(`✅ ${pendingItem.name} adicionado com obs!`, 'success');
         setPendingItem(null);
         setNoteText('');
     };
 
-    // ── Async send: optimistic UI, DB fires in background ──────────────────────
-    const handleSendOrder = () => {
+    const handleSendOrder = async () => {
         if (isSending || !hasDrafts) return;
         setIsSending(true);
-        // Optimistic: mark drafts as pending immediately
-        sendTableOrder(activeTableId);
-        // Simulate async DB write to Railway (non-blocking)
-        setTimeout(() => {
+
+        try {
+            // Envia para o seu PC do Caixa (Servidor Local)
+            const response = await fetch('http://localhost:3001/api/enviar-pedido', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mesa: activeTableId,
+                    itens: currentCart.filter(i => i.status === 'DRAFT'),
+                    total: grandTotal
+                })
+            });
+
+            if (response.ok) {
+                sendTableOrder(activeTableId); // Atualiza a tela (KDS)
+                showToast('✅ Pedido Enviado e Impresso!', 'success');
+            }
+        } catch (error) {
+            showToast('⚠️ Erro ao falar com o servidor local', 'info');
+        } finally {
             setIsSending(false);
-            showToast('✅ Pedido enviado para a cozinha!', 'success');
-        }, 400);
+        }
     };
 
-    // ── Switch table (2-click) ──────────────────────────────────────────────────
     const handleSwitchTable = (targetId: string) => {
         moveTableItems(activeTableId, targetId);
         selectActiveTable(targetId);
         setIsSwitchTableOpen(false);
-        showToast(`✅ Mesa transferida para Mesa ${targetId}`, 'success');
+        showToast(`✅ Transferido para Mesa ${targetId}`, 'success');
     };
 
     const handleFinishPayment = (mode: string) => {
@@ -190,9 +196,7 @@ const WaiterView: React.FC = () => {
         }, 1500);
     };
 
-    // ─── 1. Visão Geral do Salão ─────────────────────────────────────────────────
-    // FIX: era `const TabMesas = () =>` (componente inline) — causava re-mount a cada render.
-    // Agora é uma função render chamada diretamente, sem criar tipo de componente novo.
+    // ─── 1. VISÃO GERAL DO SALÃO ─────────────────────────────────────────────────
     const renderMesas = () => {
         const sortedTables = [...tables].sort((a, b) => {
             if (a.status === TableStatus.OCCUPIED && b.status !== TableStatus.OCCUPIED) return -1;
@@ -201,15 +205,11 @@ const WaiterView: React.FC = () => {
         });
 
         return (
-            <div className="flex-1 flex flex-col overflow-hidden bg-background-dark">
-                <div className="px-4 py-4 bg-card-dark border-b border-border-dark flex justify-between items-center shadow-lg z-10">
+            <div className="flex-1 flex flex-col overflow-hidden bg-[#0d1218]">
+                <div className="px-5 py-6 bg-[#11161d] border-b border-white/5 flex justify-between items-center shadow-lg z-10 shrink-0">
                     <div>
-                        <h1 className="text-xl font-black text-white italic">VISÃO GERAL</h1>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Selecione uma mesa</p>
-                    </div>
-                    <div className="flex gap-2 text-[10px] font-black uppercase text-slate-500">
-                        <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-400"></span> Livre</div>
-                        <div className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-400"></span> Ocupada</div>
+                        <h1 className="text-2xl font-black text-white italic tracking-tighter">SALÃO</h1>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Selecione uma mesa</p>
                     </div>
                 </div>
 
@@ -227,47 +227,37 @@ const WaiterView: React.FC = () => {
                             const elapsedMs = now - oldest;
                             const elapsed = cart.length > 0 ? formatElapsed(elapsedMs) : null;
                             const maxTime = 7200000;
-                            const progressPct = table.status === TableStatus.OCCUPIED && cart.length > 0
-                                ? Math.min(100, (elapsedMs / maxTime) * 100) : 0;
+                            const progressPct = table.status === TableStatus.OCCUPIED && cart.length > 0 ? Math.min(100, (elapsedMs / maxTime) * 100) : 0;
 
                             return (
                                 <button
                                     key={table.id}
                                     onClick={() => handleSelectTable(table.id)}
-                                    className={`relative overflow-hidden p-4 rounded-3xl border-2 flex flex-col gap-3 text-left transition-all active:scale-95 bg-card-dark ${meta.border} shadow-lg`}
+                                    className={`relative overflow-hidden p-5 rounded-[2rem] border-2 flex flex-col gap-3 text-left transition-all active:scale-95 bg-[#11161d] ${meta.border} shadow-xl h-44`}
                                 >
-                                    <div className={`absolute top-0 left-0 right-0 h-24 bg-gradient-to-b ${meta.gradient} opacity-50`}></div>
+                                    <div className={`absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b ${meta.gradient} opacity-30`}></div>
                                     {hasReady && (
-                                        <span className="absolute top-4 right-4 flex h-3 w-3">
+                                        <span className="absolute top-4 right-4 flex h-4 w-4">
                                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                                            <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500"></span>
                                         </span>
                                     )}
-                                    <div className="relative z-10 flex items-center justify-between">
-                                        <span className="text-3xl font-black text-white italic tracking-tighter">Mesa {table.id}</span>
+                                    <div className="relative z-10">
+                                        <span className="text-3xl font-black text-white italic tracking-tighter">MESA {table.id}</span>
                                     </div>
                                     <div className="relative z-10 flex items-center justify-between text-xs mt-1">
-                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${meta.border} ${meta.text} bg-background-dark/80 backdrop-blur`}>
+                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${meta.border} ${meta.text} bg-black/40 backdrop-blur`}>
                                             {meta.label}
                                         </span>
-                                        <span className="text-slate-400 font-bold">{table.capacity} pax</span>
                                     </div>
                                     {table.status === TableStatus.OCCUPIED && (
                                         <div className="relative z-10 mt-auto pt-4 space-y-2">
                                             <div className="flex justify-between items-end">
-                                                <span className="font-mono text-sm font-bold text-slate-300">⏱ {elapsed || '00:00'}</span>
-                                                <span className={`text-lg font-black ${meta.text}`}>R$ {total.toFixed(2)}</span>
+                                                <span className="font-mono text-sm font-bold text-slate-300 flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">schedule</span> {elapsed || '00:00'}</span>
+                                                <span className={`text-xl font-black ${meta.text}`}>R$ {total.toFixed(0)}</span>
                                             </div>
-                                            <div className="w-full h-1 bg-black/50 rounded-full overflow-hidden">
-                                                <div className={`h-full ${progressPct > 75 ? 'bg-danger' : progressPct > 50 ? 'bg-warning' : 'bg-primary'} transition-all`} style={{ width: `${progressPct}%` }}></div>
-                                            </div>
-                                        </div>
-                                    )}
-                                    {table.status === TableStatus.FREE && (
-                                        <div className="relative z-10 mt-auto pt-6 flex justify-center">
-                                            <div className="px-4 py-2 rounded-xl bg-white/5 text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                                                <span className="material-symbols-outlined text-sm">restaurant</span>
-                                                Abrir Mesa
+                                            <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden">
+                                                <div className={`h-full ${progressPct > 75 ? 'bg-rose-500' : progressPct > 50 ? 'bg-amber-400' : 'bg-emerald-500'} transition-all`} style={{ width: `${progressPct}%` }}></div>
                                             </div>
                                         </div>
                                     )}
@@ -280,257 +270,202 @@ const WaiterView: React.FC = () => {
         );
     };
 
-    // ─── 2. Comanda com Atalhos Rápidos 4×2 ────────────────────────────────────
+    // ─── 2. COMANDA E FECHAMENTO ─────────────────────────────────────────────────
     const renderComanda = () => {
-        // Guarda: redireciona para a aba de mesas se nenhuma mesa está selecionada válida
         if (!activeTable) {
             return (
-                <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-background-dark opacity-50">
-                    <span className="material-symbols-outlined text-6xl">table_restaurant</span>
-                    <p className="text-sm font-black uppercase tracking-widest text-center">Selecione uma mesa<br/><span className="text-xs opacity-60">Volte para a aba Salão</span></p>
+                <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-[#0d1218] opacity-50">
+                    <span className="material-symbols-outlined text-7xl">table_restaurant</span>
+                    <p className="text-sm font-black uppercase tracking-widest text-center">Selecione uma mesa<br /><span className="text-xs opacity-60">Volte para o Salão</span></p>
                 </div>
             );
         }
-        const oldest = currentCart.reduce((min, i) => {
-            const ts = (i as any).createdAt || now;
-            return ts < min ? ts : min;
-        }, now);
-        const elapsed = currentCart.length > 0 ? formatElapsed(now - oldest) : null;
+
+        const drafts = currentCart.filter(i => i.status === 'DRAFT');
+        const sent = currentCart.filter(i => i.status !== 'DRAFT');
+        const elapsed = currentCart.length > 0 ? formatElapsed(now - currentCart.reduce((min, i) => Math.min((i as any).createdAt || now, min), now)) : null;
 
         return (
-            <div className="flex-1 flex flex-col overflow-hidden bg-background-dark">
-                {/* Header da Mesa */}
-                <div className="px-4 py-3 bg-card-dark border-b border-white/10 flex items-center justify-between z-10 shadow-lg gap-3">
+            <div className="flex-1 flex flex-col overflow-hidden bg-[#0d1218]">
+                <div className="p-5 bg-[#11161d] border-b border-white/5 flex items-center justify-between z-10 shadow-lg shrink-0">
                     <div className="min-w-0 flex-1">
-                        <h2 className="text-2xl font-black italic text-white tracking-tighter">MESA {activeTableId || '—'}</h2>
-                        {elapsed && <p className="text-xs text-primary font-bold uppercase tracking-widest">⏱ Ativa há {elapsed}</p>}
+                        <h2 className="text-3xl font-black italic text-white tracking-tighter">MESA {activeTableId}</h2>
+                        {elapsed && <p className="text-sm text-indigo-400 font-bold uppercase tracking-widest">Ativa há {elapsed}</p>}
                     </div>
-                    {/* Trocar Mesa */}
-                    {currentCart.length > 0 && (
-                        <button
-                            onClick={() => setIsSwitchTableOpen(true)}
-                            className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-widest rounded-xl active:scale-95 transition-all"
-                        >
-                            <span className="material-symbols-outlined text-sm">swap_horiz</span>
-                            Trocar Mesa
+                    <div className="flex items-center gap-3">
+                        {currentCart.length > 0 && (
+                            <button onClick={() => setIsSwitchTableOpen(true)} className="size-12 bg-amber-500/10 text-amber-400 rounded-2xl flex items-center justify-center border border-amber-500/20 active:scale-95 transition-all">
+                                <span className="material-symbols-outlined text-2xl">swap_horiz</span>
+                            </button>
+                        )}
+                        <button onClick={() => setActiveTab('cardapio')} className="size-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/30 active:scale-95 transition-all">
+                            <span className="material-symbols-outlined text-3xl">add</span>
                         </button>
-                    )}
-                    <button
-                        onClick={() => { setActiveTab('cardapio'); }}
-                        className="shrink-0 size-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-all"
-                    >
-                        <span className="material-symbols-outlined text-white text-2xl">add</span>
-                    </button>
+                    </div>
                 </div>
 
-                {/* ── Atalhos Rápidos: grade 4×2 ── */}
-                {activeTableId && (
-                    <div className="px-3 py-3 border-b border-white/5 bg-black/20 shrink-0">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                                <span className="material-symbols-outlined text-xs">bolt</span>
-                                Lançamento Rápido
-                            </span>
-                            <span className="text-[9px] text-slate-600 font-bold">1-Toque · Seg. p/ obs.</span>
-                        </div>
-                        <div className="grid grid-cols-4 gap-2">
-                            {TOP_ITEMS.map((item, idx) => (
-                                <div
-                                    key={`top-${idx}`}
-                                    onClick={() => handleInstantAdd(item)}
-                                    role="button"
-                                    onContextMenu={e => { e.preventDefault(); handleOpenNotes(item); }}
-                                    className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border cursor-pointer active:scale-90 transition-all ${!item.available ? 'opacity-30 grayscale' : 'bg-card-dark border-white/10 hover:border-primary/50 active:bg-white/10'}`}
-                                    title={item.name}
-                                >
-                                    <div className="w-full aspect-square rounded-lg overflow-hidden bg-black/40">
-                                        <img src={item.image} className="w-full h-full object-cover opacity-80" alt={item.name} />
-                                    </div>
-                                    <span className="text-[8px] font-bold text-white leading-tight text-center line-clamp-1 w-full">{item.name}</span>
-                                    <span className="text-[9px] font-black text-primary">R${item.price.toFixed(0)}</span>
-                                    {/* Note button overlay */}
-                                    <button
-                                        onClick={e => { e.stopPropagation(); handleOpenNotes(item); }}
-                                        className="absolute top-1 right-1 size-4 bg-black/60 rounded-full flex items-center justify-center cursor-pointer"
-                                    >
-                                        <span className="material-symbols-outlined text-[9px] text-slate-400">edit_note</span>
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Lista de itens */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
                     {currentCart.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center gap-4 opacity-30 p-8">
+                        <div className="py-20 flex flex-col items-center justify-center gap-4 opacity-30">
                             <span className="material-symbols-outlined text-7xl font-thin">receipt_long</span>
-                            <p className="text-sm font-bold uppercase tracking-widest text-center">Nenhum item lançado</p>
+                            <p className="text-base font-bold uppercase tracking-widest text-center">Nenhum item lançado</p>
                         </div>
                     ) : (
-                        <div className="p-2 space-y-2">
-                            {currentCart.map((item, idx) => {
-                                const isReady = item.status === 'READY';
-                                const isDraft = item.status === 'DRAFT';
-                                return (
-                                    <div
-                                        key={idx}
-                                        className={`p-4 rounded-2xl flex items-center gap-3 transition-all ${isDraft ? 'bg-card-dark border border-amber-500/20 shadow-lg relative overflow-hidden' :
-                                            isReady ? 'bg-emerald-500/10 border-2 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.15)]' :
-                                                'bg-card-dark border border-white/5'
-                                            }`}
-                                    >
-                                        {isDraft && <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>}
-                                        <span className={`shrink-0 px-2 py-1.5 rounded-lg text-[9px] font-black uppercase flex flex-col items-center justify-center text-center leading-none ${isDraft ? 'bg-amber-500/10 text-amber-500' :
-                                            isReady ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' :
-                                                'bg-blue-500/10 text-blue-400'
-                                            }`}>
-                                            {isDraft ? <><span className="material-symbols-outlined text-lg mb-0.5">draft</span>NOVO</> :
-                                                isReady ? <><span className="material-symbols-outlined text-lg mb-0.5">room_service</span>PRONTO</> :
-                                                    <><span className="material-symbols-outlined text-lg mb-0.5">skillet</span>PREPARO</>}
-                                        </span>
-                                        <div className="flex-1 min-w-0 pl-2">
-                                            <p className="text-base font-black text-white truncate">{item.qty}x {item.name}</p>
-                                            {item.notes && <p className="text-xs text-amber-400/80 font-bold italic mt-0.5">📝 {item.notes}</p>}
-                                            <p className="text-sm text-slate-400 font-bold font-mono mt-1">R$ {(item.price * item.qty).toFixed(2)}</p>
-                                        </div>
-                                        {isReady && (
-                                            <button
-                                                onClick={() => updateItemStatus(activeTableId, item.id, 'SERVED')}
-                                                className="shrink-0 size-12 bg-white text-emerald-600 rounded-xl flex items-center justify-center font-black active:scale-90 transition-all shadow-xl"
-                                            >
-                                                <span className="material-symbols-outlined text-2xl">check</span>
-                                            </button>
-                                        )}
-                                        {isDraft && (
-                                            <button
-                                                onClick={() => removeItemFromTable(activeTableId, item.id)}
-                                                className="shrink-0 p-3 bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors active:scale-90"
-                                            >
-                                                <span className="material-symbols-outlined">delete</span>
-                                            </button>
-                                        )}
+                        <>
+                            {drafts.length > 0 && (
+                                <div className="space-y-3">
+                                    <h3 className="text-xs font-black uppercase text-amber-500 tracking-[0.2em] px-2 flex items-center gap-2"><span className="material-symbols-outlined text-sm">warning</span> Rascunho</h3>
+                                    <div className="bg-amber-500/5 border-2 border-amber-500/20 rounded-[2rem] p-2 space-y-2">
+                                        {drafts.map((item, idx) => (
+                                            <div key={`draft-${idx}`} className="bg-[#11161d] p-4 rounded-2xl flex items-center justify-between shadow-lg">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-lg font-black text-white truncate">{item.qty}x {item.name}</p>
+                                                    {item.notes && <p className="text-sm text-amber-400/80 font-bold italic mt-1">📝 {item.notes}</p>}
+                                                </div>
+                                                <div className="flex items-center gap-4 ml-4 shrink-0">
+                                                    <span className="text-base font-black text-amber-400 font-mono">R$ {(item.price * item.qty).toFixed(2)}</span>
+                                                    <button onClick={() => removeItemFromTable(activeTableId, item.id)} className="size-12 bg-rose-500/10 text-rose-500 rounded-xl flex items-center justify-center active:scale-90 transition-all">
+                                                        <span className="material-symbols-outlined">delete</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                );
-                            })}
-                        </div>
+                                </div>
+                            )}
+
+                            {sent.length > 0 && (
+                                <div className="space-y-3">
+                                    <h3 className="text-xs font-black uppercase text-slate-500 tracking-[0.2em] px-2">Itens do Pedido</h3>
+                                    <div className="space-y-2">
+                                        {sent.map((item, idx) => {
+                                            const isReady = item.status === 'READY';
+                                            const isPending = item.status === 'PENDING';
+                                            return (
+                                                <div key={`sent-${idx}`} className={`p-5 rounded-3xl flex items-center justify-between border ${isReady ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/5 border-white/5'}`}>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className={`text-lg font-black truncate ${isReady ? 'text-emerald-400' : 'text-slate-200'}`}>{item.qty}x {item.name}</p>
+                                                        {item.notes && <p className="text-sm text-slate-400 font-bold italic mt-1">↳ {item.notes}</p>}
+                                                        <div className="mt-2 flex items-center gap-2">
+                                                            <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${isReady ? 'bg-emerald-500 text-white' : isPending ? 'bg-amber-400/20 text-amber-400' : 'bg-slate-500/20 text-slate-400'}`}>
+                                                                {isReady ? 'Pronto (Levar)' : isPending ? 'Na Cozinha' : 'Servido'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-3 shrink-0 ml-4">
+                                                        <span className="text-base font-black text-slate-400 font-mono">R$ {(item.price * item.qty).toFixed(2)}</span>
+                                                        {isReady && (
+                                                            <button onClick={() => updateItemStatus(activeTableId, item.id, 'SERVED')} className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black uppercase active:scale-95 shadow-lg flex items-center gap-2">
+                                                                <span className="material-symbols-outlined text-sm">check</span> Entregue
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
 
-                {/* Rodapé de ações */}
                 {currentCart.length > 0 && (
-                    <div className="p-4 border-t border-border-dark bg-[#12161b] shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-20">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs text-slate-500 font-bold uppercase">Subtotal R$ {currentTotal.toFixed(2)}</span>
-                            <span className="text-xs text-slate-500 font-bold uppercase">Taxa R$ {serviceFee.toFixed(2)}</span>
+                    <div className="p-5 border-t border-white/5 bg-[#11161d] pb-6 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20">
+                        <div className="flex justify-between items-end mb-5">
+                            <div>
+                                <span className="text-xs text-slate-500 font-bold uppercase tracking-widest">Total da Mesa</span>
+                                <p className="text-4xl font-black text-indigo-400 tracking-tighter italic">R$ {grandTotal.toFixed(2)}</p>
+                            </div>
+                            <span className="text-xs text-slate-500 font-bold uppercase">+10% R$ {serviceFee.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between items-end mb-3">
-                            <span className="text-sm font-black uppercase text-slate-300">Total da Mesa</span>
-                            <span className="text-3xl font-black text-primary tracking-tighter italic">R$ {grandTotal.toFixed(2)}</span>
-                        </div>
-                        <div className="flex gap-3">
-                            {hasDrafts ? (
-                                <button
-                                    onClick={handleSendOrder}
-                                    disabled={isSending}
-                                    className={`flex-1 py-4 rounded-2xl text-white text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-xl ${isSending ? 'bg-emerald-700 shadow-none' : 'bg-emerald-500 shadow-emerald-500/20'}`}
-                                >
-                                    {isSending ? (
-                                        <>
-                                            <div className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                            Enviando...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="material-symbols-outlined text-xl">send</span>
-                                            Lançar para Cozinha
-                                        </>
-                                    )}
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={() => { setIsCheckoutOpen(true); setPaymentStep('summary'); }}
-                                    className="flex-1 py-4 rounded-2xl bg-white text-black text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-xl shadow-white/10"
-                                >
-                                    <span className="material-symbols-outlined text-xl">receipt_long</span>
-                                    Resumo da Conta
-                                </button>
-                            )}
-                        </div>
+
+                        {hasDrafts ? (
+                            <button onClick={handleSendOrder} disabled={isSending} className={`w-full h-16 rounded-[1.5rem] text-white text-base font-black uppercase tracking-[0.15em] flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-2xl ${isSending ? 'bg-amber-600' : 'bg-amber-500 shadow-amber-500/20'}`}>
+                                {isSending ? <div className="size-6 border-4 border-white/30 border-t-white rounded-full animate-spin" /> : <><span className="material-symbols-outlined text-2xl">send</span> Lançar Pedidos ({draftItemsCount})</>}
+                            </button>
+                        ) : (
+                            <button onClick={() => { setIsCheckoutOpen(true); setPaymentStep('summary'); }} className="w-full h-16 rounded-[1.5rem] bg-white text-black text-base font-black uppercase tracking-[0.15em] flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-xl shadow-white/10">
+                                <span className="material-symbols-outlined text-2xl">receipt_long</span> Fechar Conta
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
         );
     };
 
-    // ─── 3. Cardápio Completo (1-toque lança direto) ────────────────────────────
+    // ─── 3. CARDÁPIO (Focado na Zona do Polegar) ────────────────────────────────
     const renderCardapio = () => (
-        <div className="flex-1 flex flex-col overflow-hidden bg-background-dark">
-            <div className="px-4 py-4 bg-card-dark border-b border-white/10 space-y-4 shadow-md z-10">
-                <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Mesa {activeTableId} · Toque p/ adicionar</span>
-                    <div className="flex items-center gap-1 text-[9px] text-slate-600 font-bold">
-                        <span className="material-symbols-outlined text-[11px]">edit_note</span>
-                        ✎ = obs
-                    </div>
-                </div>
-                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#0d1218] relative">
+            {/* Header: Categorias + Botão de Lupa */}
+            <div className="px-4 py-3 bg-[#11161d] border-b border-white/5 shadow-md z-10 shrink-0">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                    {/* Botão para mostrar/esconder a pesquisa */}
+                    <button
+                        onClick={() => {
+                            if (showSearch) setSearch(''); // Limpa a busca ao fechar
+                            setShowSearch(!showSearch);
+                        }}
+                        className={`shrink-0 size-12 rounded-2xl flex items-center justify-center transition-all ${showSearch || search ? 'bg-indigo-600 text-white' : 'bg-white/5 border border-white/10 text-slate-400'}`}
+                    >
+                        <span className="material-symbols-outlined text-xl">{showSearch ? 'close' : 'search'}</span>
+                    </button>
+
+                    {/* Filtros de Categoria */}
                     {(['all', 'sushi', 'kitchen', 'drinks'] as Category[]).map(cat => (
                         <button
                             key={cat}
                             onClick={() => setCategory(cat)}
-                            className={`shrink-0 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${category === cat ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105' : 'bg-[#1a2329] border border-white/5 text-slate-400'}`}
+                            className={`shrink-0 px-5 h-12 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${category === cat ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white/5 border border-white/5 text-slate-400'}`}
                         >
-                            {cat === 'all' ? 'Tudo' : cat === 'sushi' ? '🍱 Sushi' : cat === 'kitchen' ? '🍳 Cozinha' : '🍹 Bar'}
+                            {cat === 'all' ? 'Tudo' : cat === 'sushi' ? '🍱 Sushi' : cat === 'kitchen' ? '🍳 Cozinha' : '🍹 Bebidas'}
                         </button>
                     ))}
                 </div>
-                <div className="relative">
-                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">search</span>
-                    <input
-                        type="text"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Buscar prato ou bebida..."
-                        className="w-full pl-12 pr-4 py-3 bg-[#1a2329] border border-white/5 rounded-2xl text-sm text-white outline-none focus:border-primary transition-all font-bold"
-                    />
-                </div>
+
+                {/* Barra de Pesquisa Dinâmica (Só aparece se a Lupa for clicada) */}
+                {showSearch && (
+                    <div className="mt-3 relative animate-in fade-in slide-in-from-top-2">
+                        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-xl">search</span>
+                        <input
+                            autoFocus
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Buscar nome do prato..."
+                            className="w-full pl-12 pr-4 h-12 bg-black border border-indigo-500/50 rounded-2xl text-sm text-white outline-none focus:border-indigo-500 transition-all font-bold shadow-inner"
+                        />
+                    </div>
+                )}
             </div>
 
-            <div className={`flex-1 overflow-y-auto p-4 custom-scrollbar ${draftItemsCount > 0 ? 'pb-32' : 'pb-8'}`}>
-                <div className="grid grid-cols-2 gap-3">
+            {/* A lista de produtos precisa de um espaço em branco no final (pb-32 ou pb-40) 
+                para que o último prato não fique escondido atrás do botão flutuante Laranja */}
+            <div className={`flex-1 overflow-y-auto p-4 custom-scrollbar ${draftItemsCount > 0 ? 'pb-40' : 'pb-10'}`}>
+                <div className="space-y-3">
                     {filteredItems.map(item => (
-                        <div
-                            key={item.id}
-                            onClick={() => handleInstantAdd(item)}
-                            role="button"
-                            className={`bg-card-dark border border-white/5 rounded-3xl p-3 flex flex-col gap-2 cursor-pointer text-left active:scale-[0.95] transition-all relative overflow-hidden shadow-lg ${!item.available ? 'opacity-40 grayscale pointer-events-none' : 'hover:border-primary/50'}`}
-                        >
-                            {item.bestSeller && (
-                                <span className="absolute top-3 left-3 px-2 py-1 bg-primary text-white text-[9px] font-black uppercase tracking-widest rounded-lg z-10 shadow-md">Top</span>
-                            )}
-                            <div className="aspect-square rounded-2xl overflow-hidden bg-black/50">
-                                <img src={item.image} className="w-full h-full object-cover mix-blend-overlay opacity-90" alt={item.name} />
+                        <div key={item.id} className={`bg-[#11161d] border border-white/5 rounded-[2rem] p-4 flex items-center gap-4 relative overflow-hidden shadow-lg ${!item.available ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+                            <div className="size-20 rounded-2xl overflow-hidden bg-black shrink-0 relative">
+                                {item.bestSeller && <span className="absolute top-1 left-1 px-1.5 py-0.5 bg-indigo-600 text-white text-[8px] font-black uppercase rounded">Top</span>}
+                                <img src={item.image} className="w-full h-full object-cover" alt={item.name} />
                             </div>
-                            <div className="px-1">
-                                <p className="text-[11px] font-black text-white line-clamp-2 leading-tight h-8">{item.name}</p>
-                                <div className="flex items-center justify-between mt-1">
-                                    <p className="text-sm font-black text-primary font-mono">R$ {item.price.toFixed(2)}</p>
-                                    {/* Notes button */}
-                                    <button
-                                        onClick={e => { e.stopPropagation(); handleOpenNotes(item); }}
-                                        className="size-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/15 cursor-pointer transition-colors"
-                                        title="Adicionar observação"
-                                    >
-                                        <span className="material-symbols-outlined text-[13px] text-slate-400">edit_note</span>
-                                    </button>
-                                </div>
+                            <div className="flex-1 min-w-0 py-1">
+                                <h3 className="text-base font-black text-white leading-tight truncate">{item.name}</h3>
+                                <p className="text-sm font-black text-indigo-400 mt-1 font-mono">R$ {item.price.toFixed(2)}</p>
+                            </div>
+                            <div className="flex flex-col gap-2 shrink-0">
+                                <button onClick={() => handleInstantAdd(item)} className="size-12 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg active:scale-90 transition-all">
+                                    <span className="material-symbols-outlined text-2xl">add</span>
+                                </button>
+                                <button onClick={() => handleOpenNotes(item)} className="size-10 bg-white/5 text-slate-400 border border-white/10 rounded-xl flex items-center justify-center active:scale-90 transition-all">
+                                    <span className="material-symbols-outlined text-lg">edit_note</span>
+                                </button>
                             </div>
                         </div>
                     ))}
                     {filteredItems.length === 0 && (
-                        <div className="col-span-2 py-20 flex flex-col items-center text-slate-600">
+                        <div className="py-20 flex flex-col items-center text-slate-600">
                             <span className="material-symbols-outlined text-6xl mb-4 opacity-50">search_off</span>
                             <p className="text-sm font-black uppercase tracking-widest">Nenhum item encontrado</p>
                         </div>
@@ -538,76 +473,64 @@ const WaiterView: React.FC = () => {
                 </div>
             </div>
 
-            {/* CARRINHO FLUTUANTE DE ITENS NÃO ENVIADOS (DRAFTS) */}
+            {/* CARRINHO FLUTUANTE DE RASCUNHO (Ancorado Corretamente) */}
             {draftItemsCount > 0 && (
-                <div 
+                <div
                     onClick={() => setActiveTab('comanda')}
-                    className="absolute bottom-4 left-4 right-4 bg-primary text-white rounded-2xl shadow-xl shadow-primary/40 flex items-center justify-between p-4 cursor-pointer active:scale-[0.98] transition-all z-50 border border-white/20 animate-in slide-in-from-bottom-5"
+                    className="absolute bottom-6 left-4 right-4 bg-amber-500 text-black rounded-[2rem] shadow-[0_10px_40px_rgba(245,158,11,0.4)] flex items-center justify-between p-5 cursor-pointer active:scale-[0.98] transition-all z-40 animate-in slide-in-from-bottom-10"
                 >
-                    <div className="flex items-center gap-3">
-                        <div className="relative">
-                            <span className="material-symbols-outlined text-3xl font-black">shopping_cart_checkout</span>
-                            <div className="absolute -top-1 -right-2 bg-white text-primary text-[10px] font-black size-5 rounded-full flex items-center justify-center shadow-md border border-primary/20">{draftItemsCount}</div>
+                    <div className="flex items-center gap-4">
+                        <div className="size-12 bg-black/10 rounded-2xl flex items-center justify-center relative">
+                            <span className="material-symbols-outlined text-3xl font-black">receipt_long</span>
+                            <div className="absolute -top-2 -right-2 bg-black text-amber-500 text-xs font-black size-6 rounded-full flex items-center justify-center shadow-md">{draftItemsCount}</div>
                         </div>
-                        <div className="flex flex-col">
-                            <h3 className="text-sm font-black uppercase tracking-widest leading-none">Ver Comanda</h3>
-                            <p className="text-xs font-bold text-white/80 mt-0.5">R$ {draftItemsValue.toFixed(2)} &#8226; Enviar para cozinha</p>
+                        <div>
+                            <h3 className="text-base font-black uppercase tracking-widest leading-none">Lançar Pedidos</h3>
+                            <p className="text-sm font-bold text-black/70 mt-1">R$ {draftItemsValue.toFixed(2)}</p>
                         </div>
                     </div>
-                    <span className="material-symbols-outlined text-white">chevron_right</span>
+                    <span className="material-symbols-outlined text-3xl">chevron_right</span>
                 </div>
             )}
         </div>
     );
 
-    // ─── 4. Alertas ─────────────────────────────────────────────────────────────
+    // ─── 4. ALERTAS (Pratos Prontos) ────────────────────────────────────────────
     const renderAlertas = () => (
-        <div className="flex-1 overflow-y-auto p-4 bg-background-dark">
+        <div className="flex-1 overflow-y-auto p-4 bg-[#0d1218]">
             {readyByTable.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center gap-4 opacity-20 py-20">
-                    <div className="size-24 rounded-full border-4 border-current flex items-center justify-center">
-                        <span className="material-symbols-outlined text-5xl">notifications_off</span>
-                    </div>
-                    <p className="text-sm font-black uppercase tracking-[0.2em] text-center">Tudo Servido<br /><span className="text-[10px] opacity-70">Aguardando Cozinha</span></p>
+                    <span className="material-symbols-outlined text-7xl">notifications_off</span>
+                    <p className="text-sm font-black uppercase tracking-[0.2em] text-center">Nenhum Alerta<br /><span className="text-[10px] opacity-70">Cozinha Vazia</span></p>
                 </div>
             ) : (
-                <div className="space-y-5">
-                    <div className="px-2 pb-2 border-b border-white/5">
-                        <h2 className="text-lg font-black text-white italic">PRATOS PRONTOS</h2>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Leve até a mesa imediatamente</p>
+                <div className="space-y-6">
+                    <div className="px-2 pb-2 border-b border-white/5 mt-4">
+                        <h2 className="text-2xl font-black text-white italic">PRATOS PRONTOS</h2>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Retire no balcão imediatamente</p>
                     </div>
                     {readyByTable.map(({ tableId, items }) => (
-                        <div key={tableId} className="bg-card-dark border border-emerald-500/30 rounded-3xl overflow-hidden shadow-[0_10px_30px_rgba(16,185,129,0.1)] relative">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
-                            <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between bg-emerald-500/5">
-                                <div className="flex items-center gap-3">
-                                    <span className="flex h-3 w-3 relative">
+                        <div key={tableId} className="bg-[#11161d] border-2 border-emerald-500/50 rounded-[2.5rem] overflow-hidden shadow-[0_10px_40px_rgba(16,185,129,0.15)] relative">
+                            <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-emerald-500/10">
+                                <div className="flex items-center gap-4">
+                                    <span className="flex h-4 w-4 relative">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                                        <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500"></span>
                                     </span>
-                                    <span className="text-2xl font-black text-white italic tracking-tighter">MESA {tableId}</span>
+                                    <span className="text-3xl font-black text-emerald-400 italic tracking-tighter">MESA {tableId}</span>
                                 </div>
-                                <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase rounded-full border border-emerald-500/20">
-                                    {items.length} item{items.length > 1 ? 's' : ''}
-                                </span>
                             </div>
-                            <div className="divide-y divide-white/5">
+                            <div className="divide-y divide-white/5 p-2">
                                 {items.map((item, idx) => (
-                                    <div key={idx} className="p-4 pl-5 flex items-center justify-between hover:bg-white/5 transition-colors">
-                                        <div>
-                                            <p className="text-base font-black text-slate-200">{item.qty}x {item.name}</p>
-                                            {item.notes && <p className="text-xs text-amber-400/80 font-bold italic mt-1">📝 {item.notes}</p>}
-                                        </div>
+                                    <div key={idx} className="p-4 flex flex-col gap-1">
+                                        <p className="text-lg font-black text-white">{item.qty}x {item.name}</p>
+                                        {item.notes && <p className="text-sm text-emerald-400/80 font-bold italic">↳ {item.notes}</p>}
                                     </div>
                                 ))}
                             </div>
-                            <div className="p-4 bg-black/20">
-                                <button
-                                    onClick={() => items.forEach(i => updateItemStatus(tableId, i.id, 'SERVED'))}
-                                    className="w-full py-4 bg-emerald-500 text-white rounded-2xl text-sm font-black uppercase tracking-[0.15em] shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
-                                >
-                                    <span className="material-symbols-outlined text-xl">done_all</span>
-                                    Marcar como Servidos
+                            <div className="p-5 bg-black/20">
+                                <button onClick={() => items.forEach(i => updateItemStatus(tableId, i.id, 'SERVED'))} className="w-full h-16 bg-emerald-500 text-white rounded-[1.5rem] text-base font-black uppercase tracking-[0.15em] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-3">
+                                    <span className="material-symbols-outlined text-2xl">done_all</span> Marcar Entregues
                                 </button>
                             </div>
                         </div>
@@ -619,246 +542,185 @@ const WaiterView: React.FC = () => {
 
     const tabs: { id: TabId; icon: string; label: string; badge?: number; badgeColor?: string }[] = [
         { id: 'mesas', icon: 'grid_view', label: 'Salão' },
-        { id: 'comanda', icon: 'receipt_long', label: 'Comanda', badge: draftItemsCount > 0 ? draftItemsCount : undefined, badgeColor: 'bg-primary' },
+        { id: 'comanda', icon: 'receipt_long', label: 'Comanda', badge: draftItemsCount > 0 ? draftItemsCount : undefined, badgeColor: 'bg-amber-500' },
         { id: 'cardapio', icon: 'restaurant_menu', label: 'Cardápio' },
-        { id: 'alertas', icon: 'notifications', label: 'Alertas', badge: notifyReadyCount > 0 ? notifyReadyCount : undefined, badgeColor: 'bg-emerald-500' },
+        { id: 'alertas', icon: 'notifications_active', label: 'Alertas', badge: notifyReadyCount > 0 ? notifyReadyCount : undefined, badgeColor: 'bg-emerald-500' },
     ];
 
     return (
-        <div className="h-full flex flex-col bg-background-dark overflow-hidden relative">
+        <div className="h-full flex flex-col bg-[#0d1218] overflow-hidden relative">
 
-            {/* 🔔 Toast */}
+            {/* 🔔 TOASTS */}
             {globalToast && (
                 <div className="absolute top-6 left-4 right-4 z-[100] animate-in slide-in-from-top-10 fade-in duration-300">
-                    <div className={`text-white p-4 rounded-2xl shadow-xl flex justify-between items-center border-2 ${globalToast.type === 'success' ? 'bg-emerald-500 border-emerald-400 shadow-emerald-500/30' : 'bg-card-dark border-primary/40 shadow-primary/10'}`}>
-                        <div className="flex items-center gap-3">
-                            <div className="size-9 bg-white/20 rounded-xl flex items-center justify-center">
-                                <span className="material-symbols-outlined text-xl">{globalToast.type === 'success' ? 'check_circle' : 'room_service'}</span>
-                            </div>
-                            <h4 className="text-sm font-black">{globalToast.message}</h4>
+                    <div className={`p-5 rounded-3xl shadow-2xl flex justify-between items-center border-2 ${globalToast.type === 'success' ? 'bg-emerald-600 border-emerald-400 text-white' : 'bg-[#11161d] border-indigo-500 text-white'}`}>
+                        <div className="flex items-center gap-4">
+                            <span className="material-symbols-outlined text-3xl">{globalToast.type === 'success' ? 'check_circle' : 'room_service'}</span>
+                            <h4 className="text-base font-black">{globalToast.message}</h4>
                         </div>
-                        <button onClick={() => setGlobalToast(null)} className="p-1.5 bg-white/10 rounded-xl">
-                            <span className="material-symbols-outlined text-sm text-white">close</span>
-                        </button>
                     </div>
                 </div>
             )}
 
-            {/* Main Content */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            {/* CONTENT */}
+            <div className="flex-1 flex flex-col overflow-hidden relative">
                 {activeTab === 'mesas' && renderMesas()}
                 {activeTab === 'comanda' && renderComanda()}
                 {activeTab === 'cardapio' && renderCardapio()}
                 {activeTab === 'alertas' && renderAlertas()}
             </div>
 
-            {/* Bottom Navigation */}
-            <nav className="shrink-0 bg-[#0d1317] border-t border-white/5 pb-safe pt-1 relative z-50">
-                <div className="flex">
+            {/* BOTTOM NAVIGATION (GIGANTE PARA POLEGAR) */}
+            <nav className="shrink-0 bg-[#0d1317] border-t border-white/5 pb-safe pt-2 relative z-50">
+                {/* Indicador do Servidor Local */}
+                <div className="flex items-center justify-center gap-2 py-1">
+                    <span className={`size-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
+                    <span className={`text-[9px] font-black uppercase tracking-widest ${isOnline ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {isOnline ? 'Cozinha Online' : 'Sem Servidor'}
+                    </span>
+                    {pendingQueueCount > 0 && (
+                        <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-[9px] font-black rounded-full border border-amber-500/30">
+                            {pendingQueueCount} aguardando sync
+                        </span>
+                    )}
+                </div>
+                <div className="flex px-2">
                     {tabs.map(tab => {
                         const isActive = activeTab === tab.id;
                         return (
                             <button
                                 key={tab.id}
-                                onClick={() => {
-                                    setActiveTab(tab.id);
-                                    if (tab.id === 'alertas') clearReadyNotifications();
-                                }}
-                                className={`flex-1 flex flex-col items-center gap-1.5 py-3 px-2 relative transition-all duration-300 ${isActive ? 'text-primary' : 'text-slate-500 hover:text-slate-300'}`}
+                                onClick={() => { setActiveTab(tab.id); if (tab.id === 'alertas') clearReadyNotifications(); }}
+                                className={`flex-1 flex flex-col items-center justify-center gap-1.5 py-3 relative transition-all duration-300 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`}
                             >
                                 {tab.badge !== undefined && tab.badge > 0 && (
-                                    <span className={`absolute top-1.5 right-[25%] translate-x-2 size-5 rounded-full ${tab.badgeColor || 'bg-rose-500'} text-white text-[10px] font-black flex items-center justify-center shadow-lg border-2 border-[#0d1317] animate-pulse`}>
+                                    <span className={`absolute top-1 right-[20%] translate-x-2 size-6 rounded-full ${tab.badgeColor} text-white text-[11px] font-black flex items-center justify-center shadow-lg border-2 border-[#0d1317] animate-pulse z-10`}>
                                         {tab.badge > 9 ? '9+' : tab.badge}
                                     </span>
                                 )}
-                                <div className={`relative flex items-center justify-center transition-all duration-300 ${isActive ? 'scale-125 -translate-y-1' : ''}`}>
-                                    <span className={`material-symbols-outlined text-2xl ${isActive ? 'fill-1' : ''}`}>{tab.icon}</span>
-                                    {isActive && <span className="absolute -inset-2 bg-primary/20 rounded-full blur-md -z-10"></span>}
+                                <div className={`relative flex items-center justify-center transition-all duration-300 ${isActive ? 'scale-110 -translate-y-1' : ''}`}>
+                                    <span className={`material-symbols-outlined text-[28px] ${isActive ? 'fill-1' : ''}`}>{tab.icon}</span>
                                 </div>
-                                <span className={`text-[9px] font-black uppercase tracking-widest transition-all ${isActive ? 'opacity-100 translate-y-0' : 'opacity-70 translate-y-1'}`}>{tab.label}</span>
+                                <span className={`text-[10px] font-black uppercase tracking-widest ${isActive ? 'opacity-100' : 'opacity-70'}`}>{tab.label}</span>
                             </button>
                         );
                     })}
                 </div>
             </nav>
 
-            {/* ── Modal: Notas do Item ────────────────────────────────────────────── */}
+            {/* ── MODAL: NOTAS (OBSERVAÇÃO) ────────────────────────────────────────────── */}
             {pendingItem && (
-                <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setPendingItem(null)}>
-                    <div className="w-full max-w-lg bg-[#12161b] border-t border-white/10 rounded-t-[2.5rem] p-6 pb-safe shadow-[0_-20px_50px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom-full duration-300" onClick={e => e.stopPropagation()}>
-                        <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-6"></div>
-                        <div className="flex items-start gap-4 mb-5">
-                            <div className="size-16 rounded-2xl overflow-hidden bg-background-dark shrink-0 shadow-lg border border-white/5">
+                <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setPendingItem(null)}>
+                    <div className="w-full bg-[#11161d] border-t border-white/10 rounded-t-[3rem] p-6 pb-8 shadow-[0_-20px_50px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom-full duration-300" onClick={e => e.stopPropagation()}>
+                        <div className="w-16 h-1.5 bg-white/20 rounded-full mx-auto mb-8"></div>
+                        <div className="flex items-center gap-5 mb-8">
+                            <div className="size-20 rounded-2xl overflow-hidden bg-black shrink-0 border border-white/10 shadow-lg">
                                 <img src={pendingItem.image} className="w-full h-full object-cover" alt={pendingItem.name} />
                             </div>
-                            <div className="pt-1">
-                                <span className="px-2 py-0.5 bg-white/10 text-slate-300 text-[9px] font-black uppercase rounded mb-1 inline-block">Mesa {activeTableId}</span>
-                                <h3 className="text-lg font-black text-white leading-tight">{pendingItem.name}</h3>
-                                <p className="text-primary font-black text-lg mt-1 font-mono">R$ {pendingItem.price.toFixed(2)}</p>
+                            <div>
+                                <span className="px-3 py-1 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-lg mb-2 inline-block">Mesa {activeTableId}</span>
+                                <h3 className="text-2xl font-black text-white leading-tight">{pendingItem.name}</h3>
                             </div>
                         </div>
-                        <div className="flex gap-2 flex-wrap mb-4">
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-4">Toques Rápidos</p>
+                        <div className="flex gap-2 flex-wrap mb-8">
                             {QUICK_NOTES.map(note => {
                                 const isActive = noteText.split(',').map(n => n.trim()).includes(note);
                                 return (
                                     <button
                                         key={note}
                                         onClick={() => toggleQuickNote(note)}
-                                        className={`px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all ${isActive ? 'bg-primary/20 text-primary border border-primary/50' : 'bg-white/5 text-slate-400 border border-white/10'}`}
+                                        className={`px-4 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border-2 active:scale-95 ${isActive ? 'bg-indigo-600/20 text-indigo-400 border-indigo-500' : 'bg-white/5 text-slate-300 border-transparent'}`}
                                     >
-                                        {isActive && <span className="material-symbols-outlined text-[10px] mr-1 align-middle">check</span>}
                                         {note}
                                     </button>
                                 );
                             })}
                         </div>
-                        <div className="bg-black/30 rounded-2xl p-4 border border-white/5 mb-5 focus-within:border-primary transition-colors">
-                            <label className="text-[10px] font-black text-primary uppercase tracking-[0.2em] flex items-center gap-1 mb-2">
-                                <span className="material-symbols-outlined text-xs">edit_note</span> Observação Adicional
-                            </label>
-                            <input
-                                autoFocus
-                                type="text"
-                                value={noteText}
-                                onChange={e => setNoteText(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && confirmAdd()}
-                                placeholder="Ex: sem cebola, limão extra..."
-                                className="w-full bg-transparent text-base text-white outline-none placeholder:text-slate-600 font-bold"
-                            />
+                        <div className="bg-black/50 rounded-[1.5rem] p-5 border border-white/5 mb-8">
+                            <input autoFocus type="text" value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Escreva uma observação livre..." className="w-full bg-transparent text-lg text-white outline-none placeholder:text-slate-600 font-bold" />
                         </div>
-                        <div className="flex gap-3">
-                            <button onClick={() => setPendingItem(null)} className="w-16 shrink-0 py-4 bg-white/5 border border-white/10 rounded-2xl text-slate-400 font-black flex items-center justify-center active:scale-95 transition-all">
-                                <span className="material-symbols-outlined text-xl">close</span>
-                            </button>
-                            <button onClick={confirmAdd} className="flex-1 py-4 bg-primary rounded-2xl text-white text-sm font-black uppercase tracking-[0.1em] shadow-xl shadow-primary/30 active:scale-95 transition-all flex items-center justify-center gap-2">
-                                <span className="material-symbols-outlined text-xl">add_shopping_cart</span>
-                                Adicionar
+                        <div className="flex gap-4">
+                            <button onClick={() => setPendingItem(null)} className="px-8 py-5 bg-white/5 rounded-[1.5rem] text-slate-400 font-black uppercase text-xs active:scale-95 transition-all">Cancelar</button>
+                            <button onClick={confirmAdd} className="flex-1 py-5 bg-indigo-600 rounded-[1.5rem] text-white text-sm font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3">
+                                <span className="material-symbols-outlined text-xl">add_shopping_cart</span> Lançar Item
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ── Modal: Trocar de Mesa (2 cliques) ───────────────────────────────── */}
+            {/* ── MODAL: TROCAR MESA ────────────────────────────────────────────────── */}
             {isSwitchTableOpen && (
-                <div className="fixed inset-0 z-[85] flex items-end justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsSwitchTableOpen(false)}>
-                    <div className="w-full max-w-lg bg-[#12161b] border-t border-white/10 rounded-t-[2.5rem] p-6 pb-safe shadow-[0_-20px_50px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom-full duration-300" onClick={e => e.stopPropagation()}>
-                        <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-5"></div>
-                        <div className="flex items-center gap-3 mb-1">
-                            <div className="size-10 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-center">
-                                <span className="material-symbols-outlined text-amber-400 text-xl">swap_horiz</span>
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-black text-white">Trocar de Mesa</h3>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Todos os itens serão transferidos</p>
-                            </div>
+                <div className="fixed inset-0 z-[85] flex items-end justify-center bg-black/90 backdrop-blur-md animate-in fade-in" onClick={() => setIsSwitchTableOpen(false)}>
+                    <div className="w-full bg-[#11161d] border-t border-white/10 rounded-t-[3rem] p-8 pb-10 shadow-2xl animate-in slide-in-from-bottom-full" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-3xl font-black text-white italic uppercase tracking-tighter mb-2">Transferir Mesa</h3>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-8">Selecione o novo destino para a Mesa {activeTableId}</p>
+
+                        <div className="grid grid-cols-3 gap-4 max-h-64 overflow-y-auto custom-scrollbar mb-8">
+                            {freeTables.map(table => (
+                                <button key={table.id} onClick={() => handleSwitchTable(table.id)} className="p-5 bg-white/5 border-2 border-white/10 rounded-3xl flex flex-col items-center gap-2 active:bg-indigo-600 active:border-indigo-500 transition-all">
+                                    <span className="text-2xl font-black text-white italic">{table.id}</span>
+                                </button>
+                            ))}
                         </div>
-                        <p className="text-xs text-slate-500 mb-4">Mesa atual: <span className="text-amber-400 font-black">Mesa {activeTableId}</span> · {currentCart.length} item{currentCart.length > 1 ? 's' : ''} · R$ {grandTotal.toFixed(2)}</p>
-
-                        {freeTables.length === 0 ? (
-                            <div className="py-10 flex flex-col items-center gap-3 text-slate-600">
-                                <span className="material-symbols-outlined text-4xl">table_restaurant</span>
-                                <p className="text-sm font-black uppercase tracking-widest text-center">Nenhuma mesa livre disponível</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto custom-scrollbar">
-                                {freeTables.map(table => (
-                                    <button
-                                        key={table.id}
-                                        onClick={() => handleSwitchTable(table.id)}
-                                        className="p-4 bg-emerald-500/10 border-2 border-emerald-500/30 rounded-2xl flex flex-col items-center gap-2 active:scale-90 transition-all hover:border-emerald-500 hover:bg-emerald-500/20"
-                                    >
-                                        <span className="material-symbols-outlined text-emerald-400 text-2xl">table_restaurant</span>
-                                        <span className="text-lg font-black text-white italic">{table.id}</span>
-                                        <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">{table.capacity} pax</span>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-
-                        <button onClick={() => setIsSwitchTableOpen(false)} className="w-full mt-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-slate-400 text-sm font-black uppercase tracking-widest active:scale-95 transition-all">
-                            Cancelar
-                        </button>
+                        <button onClick={() => setIsSwitchTableOpen(false)} className="w-full py-5 bg-white/5 rounded-3xl text-slate-400 text-xs font-black uppercase tracking-widest">Cancelar Transferência</button>
                     </div>
                 </div>
             )}
 
-            {/* ── Modal: Resumo da Conta ───────────────────────────────────────────── */}
+            {/* ── MODAL: FECHAR CONTA ──────────────────────────────────────────────── */}
             {isCheckoutOpen && (
-                <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/90 backdrop-blur-xl animate-in fade-in duration-300" onClick={() => paymentStep === 'summary' && setIsCheckoutOpen(false)}>
-                    <div className="w-full max-w-lg bg-[#12161b] border-t border-white/10 rounded-t-[2.5rem] flex flex-col max-h-[90vh] shadow-[0_-20px_60px_rgba(230,99,55,0.15)] animate-in slide-in-from-bottom-full duration-300" onClick={e => e.stopPropagation()}>
-                        <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mt-4 mb-2 shrink-0"></div>
-
+                <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/95 backdrop-blur-xl animate-in fade-in" onClick={() => paymentStep === 'summary' && setIsCheckoutOpen(false)}>
+                    <div className="w-full bg-[#12161b] border-t border-white/10 rounded-t-[3rem] flex flex-col max-h-[90vh] shadow-[0_-20px_60px_rgba(255,255,255,0.05)] animate-in slide-in-from-bottom-full" onClick={e => e.stopPropagation()}>
                         {paymentStep === 'summary' && (
-                            <div className="p-6 flex flex-col h-full overflow-hidden">
-                                <div className="flex items-center justify-between mb-6 shrink-0">
-                                    <div>
-                                        <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter">MESA {activeTableId}</h2>
-                                        <p className="text-[10px] font-black text-primary uppercase tracking-widest mt-1">Conferência de Conta</p>
-                                    </div>
-                                    <button onClick={() => setIsCheckoutOpen(false)} className="size-12 bg-white/5 rounded-2xl flex items-center justify-center text-slate-400 border border-white/5">
+                            <div className="p-8 flex flex-col h-full overflow-hidden">
+                                <div className="flex justify-between items-center mb-8 shrink-0">
+                                    <h2 className="text-4xl font-black italic uppercase text-white tracking-tighter">MESA {activeTableId}</h2>
+                                    <button onClick={() => setIsCheckoutOpen(false)} className="size-12 bg-white/10 rounded-2xl flex items-center justify-center text-slate-400">
                                         <span className="material-symbols-outlined text-2xl">close</span>
                                     </button>
                                 </div>
-                                <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/30 rounded-3xl p-5 border border-white/5 mb-5 space-y-3">
-                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-3">Itens Consumidos ({currentCart.length})</p>
+                                <div className="flex-1 overflow-y-auto bg-black/40 rounded-[2rem] p-6 border border-white/5 mb-6 space-y-4">
+                                    <p className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Extrato de Consumo</p>
                                     {currentCart.map((item, i) => (
-                                        <div key={i} className="flex justify-between items-start text-sm border-b border-white/5 pb-3 last:border-0 last:pb-0">
+                                        <div key={i} className="flex justify-between items-start text-base border-b border-white/5 pb-4 last:border-0 last:pb-0">
                                             <div>
                                                 <span className="text-white font-bold">{item.qty}x {item.name}</span>
-                                                {item.notes && <p className="text-[10px] text-amber-500 font-bold italic mt-0.5">↳ {item.notes}</p>}
                                             </div>
-                                            <span className="text-slate-400 font-mono shrink-0 ml-4 font-bold">R$ {(item.price * item.qty).toFixed(2)}</span>
+                                            <span className="text-slate-400 font-mono font-bold">R$ {(item.price * item.qty).toFixed(2)}</span>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="bg-gradient-to-br from-card-dark to-[#0d1317] rounded-3xl p-5 border border-white/10 shrink-0 shadow-lg mb-5">
-                                    <div className="space-y-2 mb-4">
-                                        <div className="flex justify-between text-slate-400 text-sm font-bold">
-                                            <span>Subtotal</span><span className="font-mono">R$ {currentTotal.toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-slate-400 text-sm font-bold">
-                                            <span>Taxa de Serviço (10%)</span><span className="font-mono text-primary">R$ {serviceFee.toFixed(2)}</span>
-                                        </div>
-                                    </div>
-                                    <div className="pt-4 border-t border-white/10 flex justify-between items-center bg-black/20 -mx-5 -mb-5 p-5 rounded-b-3xl">
-                                        <span className="font-black text-white text-lg">TOTAL FINAL</span>
-                                        <span className="text-4xl font-black text-primary italic tracking-tighter">R$ {grandTotal.toFixed(2)}</span>
+                                <div className="bg-white text-black rounded-[2rem] p-6 shadow-xl mb-6 shrink-0">
+                                    <div className="flex justify-between text-slate-600 text-sm font-black uppercase mb-2"><span>Subtotal</span><span>R$ {currentTotal.toFixed(2)}</span></div>
+                                    <div className="flex justify-between text-slate-600 text-sm font-black uppercase mb-4"><span>Serviço 10%</span><span>R$ {serviceFee.toFixed(2)}</span></div>
+                                    <div className="pt-4 border-t border-black/10 flex justify-between items-center">
+                                        <span className="font-black text-xl">TOTAL Pagar</span>
+                                        <span className="text-4xl font-black italic tracking-tighter">R$ {grandTotal.toFixed(2)}</span>
                                     </div>
                                 </div>
-                                <div className="shrink-0">
-                                    <button
-                                        onClick={() => handleFinishPayment('solicitado')}
-                                        className="w-full py-5 rounded-2xl bg-white text-black font-black uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-[0_10px_30px_rgba(255,255,255,0.15)]"
-                                    >
-                                        <span className="material-symbols-outlined text-xl">payments</span>
-                                        Solicitar Fechamento no Caixa
-                                    </button>
-                                </div>
+                                <button onClick={() => handleFinishPayment('solicitado')} className="w-full py-6 rounded-[2rem] bg-indigo-600 text-white font-black uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 active:scale-95 shadow-lg shadow-indigo-600/30">
+                                    <span className="material-symbols-outlined text-2xl">payments</span> Solicitar no Caixa
+                                </button>
                             </div>
                         )}
 
                         {paymentStep === 'processing' && (
-                            <div className="h-80 flex flex-col items-center justify-center gap-6">
-                                <div className="relative size-24">
-                                    <div className="absolute inset-0 border-8 border-primary/20 rounded-full" />
-                                    <div className="absolute inset-0 border-8 border-primary border-t-transparent rounded-full animate-spin" />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-black uppercase tracking-[0.2em] text-white text-center">Notificando Caixa</h3>
-                                    <p className="text-xs text-slate-500 font-bold text-center mt-2">Aguarde um momento...</p>
-                                </div>
+                            <div className="h-96 flex flex-col items-center justify-center gap-8">
+                                <div className="size-20 border-8 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+                                <h3 className="text-2xl font-black uppercase tracking-[0.2em] text-white">Notificando Caixa...</h3>
                             </div>
                         )}
 
                         {paymentStep === 'success' && (
-                            <div className="h-80 flex flex-col items-center justify-center gap-8 text-center px-8">
-                                <div className="size-28 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_60px_rgba(16,185,129,0.4)]">
-                                    <span className="material-symbols-outlined text-white text-6xl font-black animate-bounce">done_all</span>
+                            <div className="h-96 flex flex-col items-center justify-center gap-8 text-center px-8">
+                                <div className="size-32 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_60px_rgba(16,185,129,0.5)] animate-in zoom-in">
+                                    <span className="material-symbols-outlined text-white text-7xl font-black">done_all</span>
                                 </div>
                                 <div>
-                                    <h3 className="text-4xl font-black italic uppercase text-white tracking-tighter">Tudo Certo!</h3>
-                                    <p className="text-sm text-slate-400 font-bold mt-2 leading-relaxed">Conta enviada para o caixa.<br />Mesa liberada.</p>
+                                    <h3 className="text-4xl font-black italic uppercase text-white tracking-tighter mb-2">Conta Enviada!</h3>
+                                    <p className="text-base text-slate-400 font-bold uppercase tracking-widest">Aguarde o caixa finalizar</p>
                                 </div>
                             </div>
                         )}

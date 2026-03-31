@@ -5,6 +5,8 @@ import { useReservations } from '../../context/ReservationContext';
 import { useCMV } from '../../context/CMVContext';
 import { TableStatus, OrderStatus } from '../../types';
 import type { CartItem } from '../../context/TableContext';
+import { isCloudMode } from '../../utils/env';
+
 const DashboardView: React.FC = () => {
     const { tables, openTables, closedTickets } = useTables();
     const { orders } = useOrders();
@@ -12,6 +14,16 @@ const DashboardView: React.FC = () => {
     const { getOverallCMV } = useCMV();
     const [now, setNow] = useState(Date.now());
     const [periodFilter, setPeriodFilter] = useState<'today' | 'week' | 'month'>('today');
+    const [cloudData, setCloudData] = useState<{faturamento: number, tickets: number, comandasFechadas: any[], comandasAbertas: number} | null>(null);
+
+    useEffect(() => {
+        if (isCloudMode()) {
+             fetch('/api/cloud-dashboard')
+                .then(r => r.json())
+                .then(data => { if (data.ok) setCloudData(data) });
+        }
+    }, [periodFilter]);
+
 
     useEffect(() => {
         const t = setInterval(() => setNow(Date.now()), 1000);
@@ -34,9 +46,11 @@ const DashboardView: React.FC = () => {
             : 30 * 24 * 60 * 60 * 1000;
 
     const filteredTickets = closedTickets.filter(t => now - t.closedAt < periodMs);
-    const faturamentoHoje = filteredTickets.reduce((acc, t) => acc + t.total, 0);
-    const ticketsHoje = filteredTickets.length;
+    const isCloud = isCloudMode();
+    const faturamentoHoje = isCloud ? (cloudData?.faturamento || 0) : filteredTickets.reduce((acc, t) => acc + t.total, 0);
+    const ticketsHoje = isCloud ? (cloudData?.tickets || 0) : filteredTickets.length;
     const ticketMedio = ticketsHoje > 0 ? faturamentoHoje / ticketsHoje : 0;
+    const ticketsExibidos = isCloud ? (cloudData?.comandasFechadas || []) : closedTickets;
 
     const faturamentoMesas = Object.entries(openTables).reduce((acc, [_, items]) => {
         return acc + (items as CartItem[]).reduce((s, i) => s + i.price * i.qty, 0);
@@ -139,7 +153,7 @@ const DashboardView: React.FC = () => {
                 {/* Linha 2: Mesas + Cozinha */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Status das Mesas */}
-                    <div className="lg:col-span-2 bg-[#111820] border border-white/5 rounded-[2rem] p-6 shadow-2xl">
+                    <div className={`lg:col-span-2 bg-[#111820] border border-white/5 rounded-[2rem] p-6 shadow-2xl ${isCloudMode() ? 'opacity-50 pointer-events-none' : ''}`}>
                         <div className="flex items-center justify-between mb-6">
                             <div className="flex items-center gap-3">
                                 <span className="material-symbols-outlined text-primary text-2xl">table_restaurant</span>
@@ -209,7 +223,7 @@ const DashboardView: React.FC = () => {
                     </div>
 
                     {/* Status da Cozinha */}
-                    <div className="bg-[#111820] border border-white/5 rounded-[2rem] p-6 shadow-2xl flex flex-col gap-5">
+                    <div className={`bg-[#111820] border border-white/5 rounded-[2rem] p-6 shadow-2xl flex flex-col gap-5 ${isCloudMode() ? 'hidden' : ''}`}>
                         <div className="flex items-center gap-3 mb-2">
                             <span className="material-symbols-outlined text-cyan-400 text-2xl">skillet</span>
                             <h3 className="text-sm font-black uppercase tracking-widest text-white">Cozinha</h3>
@@ -246,11 +260,11 @@ const DashboardView: React.FC = () => {
                 <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <span className="material-symbols-outlined text-primary">history</span>
-                        <h3 className="text-sm font-black uppercase tracking-widest text-white">Últimos Tickets Fechados</h3>
+                        <h3 className="text-sm font-black uppercase tracking-widest text-white">Últimos Tickets Fechados {isCloud && '(Nuvem)'}</h3>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{closedTickets.length} total</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{ticketsExibidos.length} total</span>
                 </div>
-                {closedTickets.length === 0 ? (
+                {ticketsExibidos.length === 0 ? (
                     <div className="p-12 text-center opacity-30">
                         <span className="material-symbols-outlined text-6xl text-slate-600">receipt_long</span>
                         <p className="text-sm font-black text-slate-500 uppercase tracking-widest mt-4">Nenhum ticket fechado ainda</p>
@@ -268,16 +282,16 @@ const DashboardView: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
-                                {closedTickets.slice(0, 10).map(ticket => (
+                                {ticketsExibidos.slice(0, 10).map((ticket: any) => (
                                     <tr key={ticket.id} className="hover:bg-white/[0.02] transition-colors">
                                         <td className="px-6 py-4">
-                                            <span className="text-sm font-black text-white">Mesa {ticket.tableId}</span>
+                                            <span className="text-sm font-black text-white">Mesa {ticket.tableId || ticket.mesa_id}</span>
                                         </td>
                                         <td className="px-6 py-4 text-xs text-slate-500 font-mono">
-                                            {new Date(ticket.closedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                            {new Date(ticket.closedAt || ticket.closed_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                         </td>
                                         <td className="px-6 py-4 text-xs text-slate-400">
-                                            {ticket.items.length} item{ticket.items.length !== 1 ? 's' : ''}
+                                            {isCloud ? '--' : (ticket.items?.length || 0) + ' itens'}
                                         </td>
                                         <td className="px-6 py-4">
                                             <PaymentBadge method={ticket.paymentMethod} />

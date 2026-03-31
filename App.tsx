@@ -16,6 +16,7 @@ import PurchasingDashboard from './views/shared/PurchasingDashboard';
 import MenuView from './views/shared/MenuView';
 import PDVView from './views/payment/PDVView';
 import PrinterSettings from './views/shared/PrinterSettings';
+import ServerConfig from './views/shared/ServerConfig';
 import CashierView from './views/payment/CashierView';
 import TeamManagement from './views/admin/TeamManagement';
 import ReservationView from './views/waiter/ReservationView';
@@ -27,6 +28,8 @@ import DeliveryAppView from './views/delivery/DeliveryAppView';
 import DriverAppView from './views/driver/DriverAppView';
 import AdminDashboardView from './views/admin/AdminDashboardView';
 import DeliveryManagerView from './views/delivery/DeliveryManagerView';
+import CloudLockView from './views/shared/CloudLockView';
+import { isCloudMode } from './utils/env';
 
 const AppContent: React.FC = () => {
   const { currentUser } = useAuth();
@@ -51,20 +54,21 @@ const AppContent: React.FC = () => {
     switch (activeView) {
       case 'admin_dashboard': return <AdminDashboardView />;
       case 'dashboard': return <DashboardView />;
-      case 'pdv': return <PDVView />;
-      case 'caixa': return <CashierView />;
+      case 'pdv': return isCloudMode() ? <CloudLockView /> : <PDVView />;
+      case 'caixa': return isCloudMode() ? <CloudLockView /> : <CashierView />;
       case 'logistica': return <LogisticsKanban />;
       case 'financeiro': return <FinanceDashboard />;
-      case 'cozinha': return <KitchenKDS />;
-      case 'mesas': return <TableMap />;
-      case 'reservas': return <ReservationView />;
+      case 'cozinha': return isCloudMode() ? <CloudLockView /> : <KitchenKDS />;
+      case 'mesas': return isCloudMode() ? <CloudLockView /> : <TableMap />;
+      case 'reservas': return isCloudMode() ? <CloudLockView /> : <ReservationView />;
       case 'estoque': return <InventoryControl />;
       case 'compras': return <PurchasingDashboard />;
       case 'cardapio': return <MenuView />;
       case 'impressao': return <PrinterSettings />;
+      case 'servidor': return <ServerConfig />;
       case 'equipe': return <TeamManagement />;
       case 'cmv': return <CMVView />;
-      case 'garcom': return <WaiterView />;
+      case 'garcom': return isCloudMode() ? <CloudLockView /> : <WaiterView />;
       case 'delivery_app': return <DeliveryAppView onNavigate={setActiveView} />;
       case 'delivery_manager': return <DeliveryManagerView />;
       case 'driver_app': return <DriverAppView />;
@@ -105,21 +109,24 @@ const AppContent: React.FC = () => {
 };
 
 import { MenuProvider } from './context/MenuContext';
+import { ServerProvider } from './context/ServerContext';
 
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <MenuProvider>
-        <OrdersProvider>
-          <ReservationProvider>
-            <TableProvider>
-              <CMVProvider>
-                <AppContent />
-              </CMVProvider>
-            </TableProvider>
-          </ReservationProvider>
-        </OrdersProvider>
-      </MenuProvider>
+      <ServerProvider>
+        <MenuProvider>
+          <OrdersProvider>
+            <ReservationProvider>
+              <TableProvider>
+                <CMVProvider>
+                  <AppContent />
+                </CMVProvider>
+              </TableProvider>
+            </ReservationProvider>
+          </OrdersProvider>
+        </MenuProvider>
+      </ServerProvider>
     </AuthProvider>
   );
 };
