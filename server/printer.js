@@ -3,8 +3,11 @@
  * Suporte: Epson, Bematech, Elgin, Daruma, Star, genérica ESC/POS
  * Conexões: USB (Windows/Linux) e Rede TCP (IP:porta)
  */
-import ThermalPrinter, { PrinterTypes, CharacterSet, BreakLine } from 'node-thermal-printer';
+import pkg from 'node-thermal-printer';
+const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } = pkg;
 import { getConfig } from './db.js';
+import fs from 'fs';
+import { execSync } from 'child_process';
 
 // ─── Mapeia marca → PrinterTypes ────────────────────────────────────────────
 const BRAND_MAP = {
@@ -22,18 +25,19 @@ const BRAND_MAP = {
  * @param {string} iface  USB: nome do driver Windows ou 'auto' | Rede: '192.168.1.50:9100'
  */
 function buildInterface(mode, iface) {
-  if (mode === 'network') {
-    const [host, port = '9100'] = iface.split(':');
-    return `tcp://${host}:${port}`;
+  if (!iface || iface === 'auto') {
+    return mode === 'network' ? 'tcp://127.0.0.1:9100' : '//localhost/EPSON TM-T20 Receipt';
   }
 
-  // USB — no Windows, se 'auto', usa o pipe do driver padrão
-  // O node-thermal-printer suporta '\\\\.\\COM3' ou nome da impressora ou pipe do Windows
-  if (iface === 'auto') {
-    // Tenta o caminho padrão de uma térmica USB no Windows
-    return `//localhost/EPSON_TM_T20`;
+  // Se parece um IP, forçamos modo Rede (TCP) independentemente do Mode
+  if (iface.match(/^[0-9.]+(?::[0-9]+)?$/)) {
+    let finalIface = iface;
+    if (!finalIface.includes(':')) finalIface += ':9100'; // Porta padrão Epson/térmicas
+    return `tcp://${finalIface}`;
   }
-  return iface; // Ex: '//localhost/Bematech_4200', '\\\\.\\COM3'
+
+  // Para USB no Windows Spooler (copy /B) ou driver mapeado
+  return iface;
 }
 
 // ─── Cria instância da impressora ────────────────────────────────────────────
@@ -45,21 +49,24 @@ async function createPrinter(printerKey) {
 
   const printerType = BRAND_MAP[brand.toUpperCase()] || PrinterTypes.EPSON;
   const iface       = buildInterface(mode, rawIface);
+  const isNetwork   = iface.startsWith('tcp://');
+
+  console.log(`[PRINTER] Criando: ${printerKey} | Marca: ${brand} | Interface: ${isNetwork ? iface : 'USB (SPOOL)'}`);
 
   const printer = new ThermalPrinter({
     type:          printerType,
-    interface:     iface,
+    interface:     isNetwork ? iface : `receipt_${printerKey}.bin`, // Se USB, escrevemos buffer em arquivo binario
     width:         width,
-    characterSet:  CharacterSet.SLOVENIA,   // suporte a ç, ã, á, etc.
+    characterSet:  CharacterSet.PC860_PORTUGUESE, // Suporte a ç, ã, á, etc. (PT-BR)
     breakLine:     BreakLine.WORD,
     removeSpecialCharacters: false,
-    lineCharacter: '─',
+    lineCharacter: '-',
     options: {
       timeout: 5000,
     },
   });
 
-  return { printer, mode, iface };
+  return { printer, mode, iface, isNetwork };
 }
 
 // ─── Funções de formatação ───────────────────────────────────────────────────
@@ -133,8 +140,22 @@ export async function printProductionTicket(payload, printerKey = 'KITCHEN') {
     printer.newLine();
     printer.cut();
 
-    const success = await printer.execute();
-    if (!success) throw new Error('Printer execute() returned false');
+    if (created.isNetwork) {
+      await printer.execute();
+      console.log(`[PRINT] ✅ Cupom de Produção enviado via REDE (${printerKey})`);
+    } else {
+      const buffer = printer.getBuffer();
+      const fileName = `receipt_${printerKey}.bin`;
+      fs.writeFileSync(fileName, buffer);
+      // Fallback Spooler Windows (copy /B) - Garante que o caminho UNC comece com \\
+      let cleanPath = created.iface.replace(/[\\]+/g, '\\');
+      if (created.iface.startsWith('\\\\') && !cleanPath.startsWith('\\\\')) {
+        cleanPath = '\\\\' + cleanPath.replace(/^\\+/, '');
+      }
+      execSync(`copy /B ${fileName} "${cleanPath}"`, { stdio: 'ignore' });
+      console.log(`[PRINT] ✅ Cupom de Produção enviado via USB/Spooler (${printerKey}) na interface: ${cleanPath}`);
+    }
+
     return { ok: true };
 
   } catch (err) {
@@ -212,8 +233,22 @@ export async function printClosingReceipt(payload, printerKey = 'KITCHEN') {
     printer.newLine();
     printer.cut();
 
-    const success = await printer.execute();
-    if (!success) throw new Error('Printer execute() returned false');
+    if (created.isNetwork) {
+      await printer.execute();
+      console.log(`[PRINT] ✅ Recibo de Fechamento enviado via REDE (${printerKey})`);
+    } else {
+      const buffer = printer.getBuffer();
+      const fileName = `receipt_${printerKey}.bin`;
+      fs.writeFileSync(fileName, buffer);
+      // Fallback Spooler Windows (copy /B) - Garante que o caminho UNC comece com \\
+      let cleanPath = created.iface.replace(/[\\]+/g, '\\');
+      if (created.iface.startsWith('\\\\') && !cleanPath.startsWith('\\\\')) {
+        cleanPath = '\\\\' + cleanPath.replace(/^\\+/, '');
+      }
+      execSync(`copy /B ${fileName} "${cleanPath}"`, { stdio: 'ignore' });
+      console.log(`[PRINT] ✅ Recibo de Fechamento enviado via USB/Spooler (${printerKey}) na interface: ${cleanPath}`);
+    }
+
     return { ok: true };
 
   } catch (err) {

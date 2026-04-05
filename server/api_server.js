@@ -109,19 +109,16 @@ app.put('/api/tables/:id', (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// PEDIDOS / COMANDAS
+// LÓGICA UNIFICADA DE PROCESSAMENTO E ROTEAMENTO
 // ════════════════════════════════════════════════════════════════════════════
-
-// Salvar/atualizar comanda completa de uma mesa (enviado pelo garçom ao lançar)
-app.post('/api/orders', async (req, res) => {
+async function processOrderInternal(mesaId, garcom, items) {
   const db = getDb();
-  const { mesaId, garcom, items } = req.body;
-
+  
   if (!mesaId || !items?.length) {
-    return res.status(400).json({ error: 'mesaId e items são obrigatórios' });
+    throw new Error('mesaId e items são obrigatórios');
   }
 
-  // Gera ou reutiliza comanda aberta para a mesa
+  // 1. Garantir comanda aberta
   let comanda = db.prepare(`SELECT * FROM comandas WHERE mesa_id = ? AND status = 'ABERTA'`).get(mesaId);
   if (!comanda) {
     const id = `comanda-${mesaId}-${Date.now()}`;
@@ -129,69 +126,128 @@ app.post('/api/orders', async (req, res) => {
     comanda = db.prepare('SELECT * FROM comandas WHERE id = ?').get(id);
   }
 
-  // Insere apenas itens novos (não existentes na DB por ID)
+  // 2. Inserir itens no banco (Ignorar se já existem)
   const insertItem = db.prepare(`
     INSERT OR IGNORE INTO comanda_itens (id, comanda_id, mesa_id, menu_item_id, name, price, qty, notes, status, printed, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?)
   `);
 
   const newItems = [];
-  const insertAll = db.transaction(() => {
+  db.transaction(() => {
     for (const item of items) {
-      const changes = insertItem.run(
+      const res = insertItem.run(
         item.id, comanda.id, mesaId,
         item.menuItemId || item.id,
-        item.name, item.price, item.qty,
+        item.name || 'Item Sem Nome', 
+        item.price || 0, 
+        item.qty || 1,
         item.notes || null,
         item.createdAt || Date.now()
       );
-      if (changes.changes > 0) newItems.push(item);
+      if (res.changes > 0) newItems.push(item);
     }
-  });
-  insertAll();
+  })();
 
-  // ── Impressão automática dos novos itens ─────────────────────────────────
-  let printResult = { ok: true, skipped: true };
-  if (newItems.length > 0) {
-    const printPayload = {
-      mesaId: `Mesa ${mesaId}`,
+  // 3. Roteamento Inteligente (BAR vs COZINHA)
+  const drinkKeywords = /Sake|Drink|Cha|Chá|Cerveja|Beer|Chopp|Coca|Lata|Agua|Água|Suco|Vinho|Gin|Long Neck|Refrigerante|Budweiser|Sprit|Fanta|Guarana|Guaraná|Pepsi|Soda|Tonica|Tônica|Red Bull|Monster|H2O|Cafe|Café/i;
+  
+  const barItems = items.filter(i => {
+    const name = i.name || '';
+    const id = String(i.menuItemId || i.id || '');
+    const isDrink = id.startsWith('b') || drinkKeywords.test(name);
+    console.log(`[DETECÇÃO] Item: "${name}" -> ROTA: ${isDrink ? 'BAR' : 'COZINHA'}`);
+    return isDrink;
+  });
+  const kitchenItems = items.filter(i => !barItems.includes(i));
+
+  console.log(`[ROTEAMENTO] Mesa ${mesaId} | BAR: ${barItems.length} | KITCHEN: ${kitchenItems.length}`);
+
+  let lastPrintResult = { ok: true };
+  const printJobs = [];
+  if (kitchenItems.length > 0) printJobs.push({ key: 'KITCHEN', lines: kitchenItems });
+  if (barItems.length > 0)     printJobs.push({ key: 'BAR',     lines: barItems });
+
+  for (const job of printJobs) {
+    const payload = {
+      mesaId: `${mesaId}`,
       garcom: garcom || 'Garçom',
-      itens: newItems.map(i => ({ qty: i.qty, name: i.name, notes: i.notes })),
+      itens: job.lines.map(i => ({ qty: i.qty, name: i.name, notes: i.notes })),
     };
 
-    printResult = await printProductionTicket(printPayload, 'KITCHEN');
-
-    // Marca itens como impressos
-    if (printResult.ok) {
-      const markPrinted = db.prepare(`UPDATE comanda_itens SET printed = 1 WHERE id = ?`);
-      const tx = db.transaction(() => {
-        for (const item of newItems) markPrinted.run(item.id);
-      });
-      tx();
-    }
-
-    // Log de impressão
+    console.log(`[IMPRESSÃO] Enviando para ${job.key}...`);
+    const res = await printProductionTicket(payload, job.key);
+    
+    // Log do trabalho no banco
     db.prepare(`
       INSERT INTO print_jobs (mesa_id, printer_key, status, payload, printed_at, error)
-      VALUES (?, 'KITCHEN', ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?)
     `).run(
-      mesaId,
-      printResult.ok ? 'OK' : 'ERROR',
-      JSON.stringify(printPayload),
+      mesaId, job.key,
+      res.ok ? 'OK' : 'ERROR',
+      JSON.stringify(payload),
       Date.now(),
-      printResult.error || null
+      res.ok ? null : res.error
     );
+
+    if (res.ok) {
+      // Marcar como impresso
+      const markPrinted = db.prepare(`UPDATE comanda_itens SET printed = 1 WHERE id = ?`);
+      db.transaction(() => {
+        for (const it of job.lines) markPrinted.run(it.id);
+      })();
+    } else {
+      lastPrintResult = res;
+      console.error(`[FALHA] Impressora ${job.key}: ${res.error}`);
+    }
   }
 
-  // Notifica KDS via Socket.io em tempo real
+  // Notificar via Socket.IO
   io.emit('new_order', { mesaId, items: newItems, garcom });
 
-  res.json({
-    ok: true,
-    comandaId: comanda.id,
-    newItems: newItems.length,
-    print: printResult,
-  });
+  return { 
+    ok: true, 
+    comandaId: comanda.id, 
+    newItems: newItems.length, 
+    print: lastPrintResult 
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ROTAS DE PEDIDO
+// ════════════════════════════════════════════════════════════════════════════
+
+app.post('/api/enviar-pedido', async (req, res) => {
+  const { mesa, itens } = req.body;
+  console.log(`[API LEGACY] Mesa ${mesa} enviou ${itens?.length} itens`);
+
+  const formattedItems = (itens || []).map((item) => ({
+    id: item.id || `item-${Date.now()}-${Math.random()}`,
+    menuItemId: item.menuItemId || item.id,
+    name: item.name || 'Item Sem Nome',
+    price: item.price || 0,
+    qty: item.qty || 1,
+    notes: item.notes,
+    createdAt: Date.now()
+  }));
+
+  try {
+    const result = await processOrderInternal(String(mesa), 'App Garçom', formattedItems);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/orders', async (req, res) => {
+  const { mesaId, garcom, items } = req.body;
+  console.log(`[API MODERNA] Mesa ${mesaId} enviou ${items?.length} itens`);
+  
+  try {
+    const result = await processOrderInternal(mesaId, garcom, items);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Status de todos os itens PENDING (para o KDS fazer polling)
@@ -258,9 +314,6 @@ app.post('/api/orders/close/:mesaId', async (req, res) => {
   res.json({ ok: true, print: printResult });
 });
 
-// ════════════════════════════════════════════════════════════════════════════
-// IMPRESSÃO DIRETA
-// ════════════════════════════════════════════════════════════════════════════
 app.post('/api/print/production', async (req, res) => {
   const result = await printProductionTicket(req.body, req.query.printer || 'KITCHEN');
   res.json(result);

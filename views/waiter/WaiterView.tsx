@@ -4,7 +4,7 @@ import { useServer } from '../../context/ServerContext';
 import { sushiMenu, barMenu, kitchenMenu } from '../../utils/mockData';
 import { MenuItem, TableStatus } from '../../types';
 
-const ALL_ITEMS = [...sushiMenu, ...kitchenMenu, ...barMenu];
+const INITIAL_ALL_ITEMS = [...sushiMenu, ...kitchenMenu, ...barMenu];
 
 const QUICK_NOTES = [
     "Sem cebolinha",
@@ -42,6 +42,15 @@ const WaiterView: React.FC = () => {
     const [category, setCategory] = useState<Category>('all');
     const [search, setSearch] = useState('');
     const [showSearch, setShowSearch] = useState(false); // ✨ Novo estado da Lupa
+
+    const [customItems, setCustomItems] = useState<MenuItem[]>(() => {
+        try {
+            const saved = localStorage.getItem('sushiflow_menu_items');
+            return saved ? JSON.parse(saved) : [];
+        } catch { return []; }
+    });
+
+    const ALL_ITEMS = useMemo(() => [...INITIAL_ALL_ITEMS, ...customItems], [customItems]);
 
     const [pendingItem, setPendingItem] = useState<MenuItem | null>(null);
     const [noteText, setNoteText] = useState('');
@@ -107,10 +116,19 @@ const WaiterView: React.FC = () => {
     }, [openTables]);
 
     const filteredItems = ALL_ITEMS.filter(item => {
-        const matchCat = category === 'all'
-            || (category === 'sushi' && sushiMenu.includes(item))
-            || (category === 'kitchen' && kitchenMenu.includes(item))
-            || (category === 'drinks' && barMenu.includes(item));
+        let matchCat = category === 'all'
+            || (category === 'sushi' && sushiMenu.includes(item as any))
+            || (category === 'kitchen' && kitchenMenu.includes(item as any))
+            || (category === 'drinks' && barMenu.includes(item as any));
+            
+        if (!matchCat && customItems.includes(item)) {
+            const cat = item.category?.toLowerCase() || '';
+            if (category === 'sushi' && cat.includes('sushi')) matchCat = true;
+            else if (category === 'kitchen' && (cat.includes('quente') || cat.includes('cozinha'))) matchCat = true;
+            else if (category === 'drinks' && (cat.includes('bebida') || cat.includes('drink') || cat.includes('bar'))) matchCat = true;
+            else if (category === 'all') matchCat = true; // should be caught by top category==='all' anyway
+        }
+
         return matchCat && (!search || item.name.toLowerCase().includes(search.toLowerCase()));
     });
 
@@ -153,23 +171,37 @@ const WaiterView: React.FC = () => {
         setIsSending(true);
 
         try {
-            // Envia para o seu PC do Caixa (Servidor Local)
-            const response = await fetch('http://localhost:3001/api/enviar-pedido', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    mesa: activeTableId,
-                    itens: currentCart.filter(i => i.status === 'DRAFT'),
-                    total: grandTotal
-                })
+            // Pega os itens que ainda não foram enviados (DRAFT)
+            const pedidosParaEnviar = currentCart.filter(i => i.status === 'DRAFT');
+
+            const result = await sendOrder({
+                mesaId: activeTableId,
+                garcom: currentUser.name || 'Garçom',
+                items: pedidosParaEnviar.map(i => ({
+                    id: i.id,
+                    menuItemId: i.id,
+                    name: i.name,
+                    price: i.price,
+                    qty: i.qty,
+                    notes: i.notes,
+                    printerRoute: (i as any).printerRoute || 'KITCHEN',
+                    createdAt: (i as any).createdAt || Date.now()
+                }))
             });
 
-            if (response.ok) {
-                sendTableOrder(activeTableId); // Atualiza a tela (KDS)
-                showToast('✅ Pedido Enviado e Impresso!', 'success');
+            if (result.ok) {
+                sendTableOrder(activeTableId);
+                if (result.print?.ok) {
+                    showToast('✅ Pedido Gravado e Impresso!', 'success');
+                } else {
+                    showToast('✅ Pedido Gravado (impressão pendente)', 'info');
+                }
+            } else {
+                showToast('❌ Erro ao enviar pedido', 'info');
             }
         } catch (error) {
-            showToast('⚠️ Erro ao falar com o servidor local', 'info');
+            console.error(error);
+            showToast('⚠️ Erro: Ligue o "node server.js" no seu PC!', 'info');
         } finally {
             setIsSending(false);
         }
