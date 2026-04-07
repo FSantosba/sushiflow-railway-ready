@@ -367,25 +367,8 @@ const AddItemModal: React.FC<{
 
   const searchGoogleImages = async () => {
     if (!imageSearchQuery.trim()) return;
-    setSearchingImages(true);
-    setImageResults([]);
-    try {
-      const query = encodeURIComponent(imageSearchQuery);
-      const response = await fetch(`https://api.unsplash.com/search/photos?query=${query}&per_page=8&orientation=squarish`, {
-        headers: {
-          'Authorization': 'Client-ID AvqQ8Vk2gGqzJf9FpGxY3tNBhE6LBfXzWqJYJhV7B8M'
-        }
-      });
-      const data = await response.json();
-      if (data.results) {
-        const urls = data.results.map((item: any) => item.urls?.small).filter(Boolean);
-        setImageResults(urls);
-      }
-    } catch (error) {
-      console.error('Erro ao buscar imagens:', error);
-    } finally {
-      setSearchingImages(false);
-    }
+    const query = encodeURIComponent(imageSearchQuery + ' comida');
+    window.open('https://www.google.com/search?tbm=isch&q=' + query, '_blank');
   };
 
   const selectImage = (url: string) => {
@@ -433,7 +416,7 @@ const AddItemModal: React.FC<{
             <div className="flex gap-2">
               <input 
                 className="flex-1 bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white" 
-                placeholder="Buscar imagem no Google..." 
+                placeholder="Buscar imagem na Web..." 
                 value={imageSearchQuery}
                 onChange={e => setImageSearchQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && searchGoogleImages()}
