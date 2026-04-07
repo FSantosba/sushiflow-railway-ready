@@ -32,6 +32,7 @@ const IngredientModal: React.FC<{
 }> = ({ onClose, onSave, suppliers, existingIngredient }) => {
   const [form, setForm] = useState({
     name: existingIngredient?.name || '',
+    image: existingIngredient?.image || '',
     category: existingIngredient?.category || 'peixes',
     unit: existingIngredient?.unit || 'kg',
     costPerUnit: existingIngredient?.costPerUnit?.toString() || '',
@@ -39,11 +40,65 @@ const IngredientModal: React.FC<{
     minStock: existingIngredient?.minStock?.toString() || ''
   });
 
+  const [imagePreview, setImagePreview] = useState(existingIngredient?.image || '');
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>(existingIngredient?.supplierIds || []);
+  const [imageResults, setImageResults] = useState<string[]>([]);
+  const [searchingImages, setSearchingImages] = useState(false);
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
   const toggleSupplier = (id: string) => {
     setSelectedSuppliers(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+  };
+
+  const searchGoogleImages = async () => {
+    if (!form.name.trim()) {
+      alert('Digite o nome do insumo primeiro!');
+      return;
+    }
+    setSearchingImages(true);
+    setImageResults([]);
+    try {
+      const query = encodeURIComponent(form.name);
+      console.log('Buscando:', query);
+      const response = await fetch(`https://api.unsplash.com/search/photos?query=${query}&per_page=8&orientation=squarish`, {
+        headers: {
+          'Authorization': 'Client-ID AvqQ8Vk2gGqzJf9FpGxY3tNBhE6LBfXzWqJYJhV7B8M'
+        }
+      });
+      console.log('Response:', response);
+      const data = await response.json();
+      console.log('Data:', data);
+      if (data.results && data.results.length > 0) {
+        const urls = data.results.map((item: any) => item.urls?.small).filter(Boolean);
+        setImageResults(urls);
+      } else {
+        alert('Nenhuma imagem encontrada para "' + form.name + '"');
+      }
+    } catch (error) {
+      console.error('Erro ao buscar imagens:', error);
+      alert('Erro ao buscar imagens: ' + error);
+    } finally {
+      setSearchingImages(false);
+    }
+  };
+
+  const selectImage = (url: string) => {
+    setImagePreview(url);
+    set('image', url);
+    setImageResults([]);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setImagePreview(base64);
+        set('image', base64);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -52,6 +107,7 @@ const IngredientModal: React.FC<{
       ...existingIngredient,
       id: existingIngredient?.id || `ing_${Date.now()}`,
       name: form.name,
+      image: form.image,
       category: form.category as any,
       unit: form.unit,
       costPerUnit: parseFloat(form.costPerUnit) || 0,
@@ -73,6 +129,58 @@ const IngredientModal: React.FC<{
         </div>
         <form onSubmit={handleSubmit} className="space-y-5 md:space-y-6">
           <div className="space-y-4">
+            <div className="flex flex-col items-center">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-2 block tracking-widest">Foto do Insumo</label>
+              <div className="relative w-24 h-24 rounded-2xl border-2 border-dashed border-white/20 bg-white/5 overflow-hidden hover:border-indigo-500 transition-colors group">
+                {imagePreview ? (
+                  <>
+                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                    <button type="button" onClick={() => { setImagePreview(''); set('image', ''); }} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white">
+                      <span className="material-symbols-outlined">delete</span>
+                    </button>
+                  </>
+                ) : (
+                  <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer">
+                    <span className="material-symbols-outlined text-slate-500 text-2xl">add_photo_alternate</span>
+                    <span className="text-[8px] text-slate-600 font-black uppercase mt-1">Foto</span>
+                    <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                  </label>
+                  )}
+              </div>
+              <div className="w-full mt-3 space-y-2">
+                <button 
+                  type="button" 
+                  onClick={searchGoogleImages}
+                  disabled={searchingImages}
+                  className="w-full px-3 py-2 bg-indigo-600 rounded-xl text-xs font-black text-white disabled:opacity-50"
+                >
+                  {searchingImages ? 'Buscando...' : 'Buscar imagem na Web'}
+                </button>
+                
+                <input 
+                  type="url" 
+                  placeholder="Ou cole o link direto da imagem aqui..." 
+                  value={form.image.startsWith('data:') ? '' : form.image}
+                  onChange={e => {
+                    const url = e.target.value;
+                    set('image', url);
+                    setImagePreview(url);
+                  }}
+                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-indigo-500 outline-none"
+                />
+                
+                {imageResults.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2 p-2 bg-black border border-white/10 rounded-xl">
+                    {imageResults.map((url, idx) => (
+                      <button key={idx} type="button" onClick={() => selectImage(url)} className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-indigo-500 transition-all">
+                        <img src={url} alt="Result" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div>
               <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block tracking-widest">Nome do Insumo</label>
               <input required type="text" value={form.name} onChange={e => set('name', e.target.value)} className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-indigo-500 outline-none" />
@@ -329,12 +437,18 @@ const InventoryControl: React.FC = () => {
                 const inCartQty = cart[product.id] || 0;
                 const isLow = product.minStock && product.stock <= product.minStock;
                 return (
-                  <button key={product.id} onClick={() => handleAddToCart(product)} className={`bg-[#11161d] border-2 rounded-2xl p-3 md:p-4 text-left flex flex-col relative transition-all active:scale-95 h-32 md:h-36 ${inCartQty > 0 ? `border-${theme}-500 bg-${theme}-500/5` : isLow ? 'border-rose-500/30 bg-rose-500/5' : 'border-white/5 hover:border-white/20'}`}>
+                  <button key={product.id} onClick={() => handleAddToCart(product)} className={`bg-[#11161d] border-2 rounded-2xl p-3 md:p-4 text-left flex flex-col relative transition-all active:scale-95 h-[160px] md:h-[192px] ${inCartQty > 0 ? `border-${theme}-500 bg-${theme}-500/5` : isLow ? 'border-rose-500/30 bg-rose-500/5' : 'border-white/5 hover:border-white/20'}`}>
                     {inCartQty > 0 && <div className={`absolute -top-2 -right-2 bg-${theme}-500 text-white font-black rounded-full size-6 md:size-7 flex items-center justify-center text-[10px] md:text-xs shadow-lg animate-in zoom-in`}>{inCartQty}</div>}
 
                     {isManagerAuth && (
                       <div onClick={(e) => { e.stopPropagation(); setEditingIngredient(product); setShowAddModal(true); }} className="absolute top-2 right-2 size-7 md:size-8 bg-black/60 rounded-full flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-black transition-all z-20">
                         <span className="material-symbols-outlined text-sm">edit</span>
+                      </div>
+                    )}
+
+                    {product.image && (
+                      <div className="w-full aspect-square mb-2 rounded-lg overflow-hidden bg-black/30">
+                        <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
                       </div>
                     )}
 
