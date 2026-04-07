@@ -153,7 +153,7 @@ const DashboardView: React.FC = () => {
                 {/* Linha 2: Mesas + Cozinha */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Status das Mesas */}
-                    <div className={`lg:col-span-2 bg-[#111820] border border-white/5 rounded-[2rem] p-6 shadow-2xl ${isCloudMode() ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <div className={`lg:col-span-2 bg-[#111820] border border-white/5 rounded-[2rem] p-6 shadow-2xl`}>
                         <div className="flex items-center justify-between mb-6">
                             <div className="flex items-center gap-3">
                                 <span className="material-symbols-outlined text-primary text-2xl">table_restaurant</span>
@@ -223,7 +223,7 @@ const DashboardView: React.FC = () => {
                     </div>
 
                     {/* Status da Cozinha */}
-                    <div className={`bg-[#111820] border border-white/5 rounded-[2rem] p-6 shadow-2xl flex flex-col gap-5 ${isCloudMode() ? 'hidden' : ''}`}>
+                    <div className={`bg-[#111820] border border-white/5 rounded-[2rem] p-6 shadow-2xl flex flex-col gap-5`}>
                         <div className="flex items-center gap-3 mb-2">
                             <span className="material-symbols-outlined text-cyan-400 text-2xl">skillet</span>
                             <h3 className="text-sm font-black uppercase tracking-widest text-white">Cozinha</h3>
