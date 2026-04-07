@@ -25,6 +25,7 @@ const MenuView: React.FC = () => {
   });
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [selectedRecipeItem, setSelectedRecipeItem] = useState<MenuItem | null>(null);
 
   const { recipes, ingredients, getItemCost, getItemCMVPercent } = useCMV();
@@ -93,6 +94,54 @@ const MenuView: React.FC = () => {
     setCustomItems(updated);
     localStorage.setItem('sushiflow_menu_items', JSON.stringify(updated));
     setIsAddModalOpen(false);
+  };
+
+  const handleUpdateItem = async (updatedItem: MenuItem) => {
+    // Se for item da API (não começa com "custom-"), atualiza no backend
+    if (!updatedItem.id.startsWith('custom-')) {
+      try {
+        const response = await fetch(`http://localhost:3001/api/produtos/${updatedItem.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nome: updatedItem.name,
+            descricao: updatedItem.description,
+            preco: updatedItem.price,
+            categoria: updatedItem.category,
+            imagem_url: updatedItem.image,
+            disponivel: updatedItem.available,
+            spicy: updatedItem.spicy,
+            vegan: updatedItem.vegan,
+            gluten_free: updatedItem.glutenFree,
+            printer_route: updatedItem.printerRoute,
+          }),
+        });
+        if (!response.ok) throw new Error('Falha ao atualizar');
+      } catch (error) {
+        console.error('Erro ao atualizar item:', error);
+        alert('Erro ao atualizar item no banco de dados');
+        return;
+      }
+    }
+
+    // Atualiza localmente para custom items
+    const updated = customItems.map(item => item.id === updatedItem.id ? updatedItem : item);
+    setCustomItems(updated);
+    localStorage.setItem('sushiflow_menu_items', JSON.stringify(updated));
+    setEditingItem(null);
+  };
+
+  const handleDeleteItem = async (id: string) => {
+    if (!id.startsWith('custom-')) {
+      try {
+        await fetch(`http://localhost:3001/api/produtos/${id}`, { method: 'DELETE' });
+      } catch (error) {
+        console.error('Erro ao deletar item:', error);
+      }
+    }
+    const updated = customItems.filter(item => item.id !== id);
+    setCustomItems(updated);
+    localStorage.setItem('sushiflow_menu_items', JSON.stringify(updated));
   };
 
   return (
@@ -196,8 +245,9 @@ const MenuView: React.FC = () => {
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <span className="material-symbols-outlined text-white text-3xl">zoom_in</span>
                       </div>
-                      <div className="absolute top-3 left-3 px-2 py-1 rounded-xl text-[10px] font-black backdrop-blur-md bg-black/60 text-white uppercase tracking-widest border border-white/10 shadow-lg">
+                      <div className="absolute top-3 left-3 px-2 py-1 rounded-xl text-[10px] font-black backdrop-blur-md bg-black/60 text-white uppercase tracking-widest border border-white/10 shadow-lg flex items-center gap-1">
                          {item.category}
+                         {item.printerRoute === 'BAR' ? <span title="Vai para o Bar" className="text-amber-400">🍹</span> : <span title="Vai para a Cozinha" className="text-rose-400">🔥</span>}
                       </div>
                       {/* Badge CMV% na imagem */}
                       {hasRecipe && cmvPct > 0 && (
@@ -228,15 +278,22 @@ const MenuView: React.FC = () => {
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4 italic leading-tight line-clamp-2">"{item.description}"</p>
 
                       <div className="mt-auto pt-4 border-t border-white/5 space-y-3">
-                        {/* Botão Livro de Receitas */}
-                        <button onClick={() => setSelectedRecipeItem(item)}
-                          className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest border transition-all ${hasRecipe
-                              ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20'
-                              : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white group-hover:border-primary/20'
-                            }`}>
-                          <span className="material-symbols-outlined text-sm">menu_book</span>
-                          {hasRecipe ? 'Ver Receita' : 'Cadastrar Receita'}
-                        </button>
+                        {/* Botão Editar e Livro de Receitas */}
+                        <div className="flex gap-2">
+                          <button onClick={() => setEditingItem(item)}
+                            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 hover:text-white transition-all">
+                            <span className="material-symbols-outlined text-sm">edit</span>
+                            Editar
+                          </button>
+                          <button onClick={() => setSelectedRecipeItem(item)}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest border transition-all ${hasRecipe
+                                ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20'
+                                : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white group-hover:border-primary/20'
+                              }`}>
+                            <span className="material-symbols-outlined text-sm">menu_book</span>
+                            {hasRecipe ? 'Ver Receita' : 'Cadastrar Receita'}
+                          </button>
+                        </div>
 
                         {/* Link da imagem */}
                         <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg border border-white/5 hover:border-white/20 transition-colors">
@@ -282,6 +339,9 @@ const MenuView: React.FC = () => {
 
       <AddItemModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddNewItem} categories={subCategories.filter(c => c !== 'Tudo')} />
+
+      <EditItemModal isOpen={!!editingItem} item={editingItem} onClose={() => setEditingItem(null)}
+        onSave={handleUpdateItem} onDelete={handleDeleteItem} categories={subCategories.filter(c => c !== 'Tudo')} />
     </div>
   );
 };
@@ -294,12 +354,45 @@ const AddItemModal: React.FC<{
   const [formData, setFormData] = useState({
     name: '', category: '', price: '', description: '',
     image: 'https://images.unsplash.com/photo-1553621042-f6e147245754?q=80&w=400&auto=format&fit=crop',
-    spicy: false, vegan: false, glutenFree: false,
+    spicy: false, vegan: false, glutenFree: false, printerRoute: 'KITCHEN' as 'KITCHEN' | 'BAR',
   });
+
+  const [imageSearchQuery, setImageSearchQuery] = useState('');
+  const [imageResults, setImageResults] = useState<string[]>([]);
+  const [searchingImages, setSearchingImages] = useState(false);
 
   useEffect(() => {
     if (isOpen && categories.length > 0) setFormData(p => ({ ...p, category: categories[0] }));
   }, [isOpen, categories]);
+
+  const searchGoogleImages = async () => {
+    if (!imageSearchQuery.trim()) return;
+    setSearchingImages(true);
+    setImageResults([]);
+    try {
+      const query = encodeURIComponent(imageSearchQuery);
+      const response = await fetch(`https://api.unsplash.com/search/photos?query=${query}&per_page=8&orientation=squarish`, {
+        headers: {
+          'Authorization': 'Client-ID AvqQ8Vk2gGqzJf9FpGxY3tNBhE6LBfXzWqJYJhV7B8M'
+        }
+      });
+      const data = await response.json();
+      if (data.results) {
+        const urls = data.results.map((item: any) => item.urls?.small).filter(Boolean);
+        setImageResults(urls);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar imagens:', error);
+    } finally {
+      setSearchingImages(false);
+    }
+  };
+
+  const selectImage = (url: string) => {
+    setFormData(p => ({ ...p, image: url }));
+    setImageResults([]);
+    setImageSearchQuery('');
+  };
 
   if (!isOpen) return null;
 
@@ -310,6 +403,7 @@ const AddItemModal: React.FC<{
       name: formData.name, category: formData.category, price: parseFloat(formData.price),
       description: formData.description, available: true, image: formData.image,
       spicy: formData.spicy, vegan: formData.vegan, glutenFree: formData.glutenFree,
+      printerRoute: formData.printerRoute,
     });
   };
 
@@ -326,8 +420,169 @@ const AddItemModal: React.FC<{
             </select>
             <input required className="bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white" placeholder="Preço" type="number" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} />
           </div>
+          <div className="grid grid-cols-1 gap-4">
+             <div className="bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white flex justify-between items-center">
+                <span className="text-xs uppercase font-bold tracking-widest text-slate-400">Rota de Produção da Impressora:</span>
+                <select className="bg-[#1a2129] border border-white/10 rounded-xl px-4 py-2 text-xs font-bold uppercase" value={formData.printerRoute} onChange={e => setFormData({ ...formData, printerRoute: e.target.value as 'KITCHEN' | 'BAR' })}>
+                   <option value="KITCHEN">🔥 COZINHA QUENTE / SUSHI</option>
+                 <option value="BAR">🍹 BAR / BEBIDAS</option>
+                </select>
+              </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <input 
+                className="flex-1 bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white" 
+                placeholder="Buscar imagem no Google..." 
+                value={imageSearchQuery}
+                onChange={e => setImageSearchQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && searchGoogleImages()}
+              />
+              <button 
+                type="button" 
+                onClick={searchGoogleImages}
+                disabled={searchingImages}
+                className="px-4 py-3 bg-primary rounded-2xl font-black uppercase text-xs disabled:opacity-50"
+              >
+                {searchingImages ? '...' : 'Buscar'}
+              </button>
+            </div>
+            
+            {imageResults.length > 0 && (
+              <div className="grid grid-cols-4 gap-2 p-3 bg-background-dark border border-border-dark rounded-2xl">
+                {imageResults.map((url, idx) => (
+                  <button key={idx} type="button" onClick={() => selectImage(url)} className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-primary transition-all">
+                    <img src={url} alt="Result" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <input className="flex-1 bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white" placeholder="URL da Imagem" value={formData.image} onChange={e => setFormData({ ...formData, image: e.target.value })} />
+              {formData.image && (
+                <div className="w-14 h-14 rounded-xl overflow-hidden border border-white/10 bg-black/30 shrink-0">
+                  <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+            </div>
+          </div>
+          <textarea required className="w-full bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white h-24 md:h-32 resize-none" placeholder="Descrição" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+          <div className="flex gap-4 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-3 md:py-4 bg-white/5 rounded-2xl font-black uppercase tracking-widest text-xs md:text-sm">Cancelar</button>
+            <button type="submit" className="flex-1 py-3 md:py-4 bg-primary rounded-2xl font-black uppercase tracking-widest text-white shadow-xl shadow-primary/20 text-xs md:text-sm">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ─── Modal: Editar item ──────────────────────────────────────
+const EditItemModal: React.FC<{
+  isOpen: boolean;
+  item: MenuItem | null;
+  onClose: () => void;
+  onSave: (item: MenuItem) => void;
+  onDelete: (id: string) => void;
+  categories: string[];
+}> = ({ isOpen, item, onClose, onSave, onDelete, categories }) => {
+  const [formData, setFormData] = useState({
+    name: '', category: '', price: '', description: '',
+    image: '', spicy: false, vegan: false, glutenFree: false, printerRoute: 'KITCHEN' as 'KITCHEN' | 'BAR',
+    available: true,
+  });
+
+  useEffect(() => {
+    if (item && isOpen) {
+      setFormData({
+        name: item.name,
+        category: item.category,
+        price: item.price.toString(),
+        description: item.description,
+        image: item.image,
+        spicy: item.spicy || false,
+        vegan: item.vegan || false,
+        glutenFree: item.glutenFree || false,
+        printerRoute: item.printerRoute || 'KITCHEN',
+        available: item.available !== false,
+      });
+    }
+  }, [item, isOpen]);
+
+  if (!isOpen || !item) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      ...item,
+      name: formData.name,
+      category: formData.category,
+      price: parseFloat(formData.price),
+      description: formData.description,
+      image: formData.image,
+      spicy: formData.spicy,
+      vegan: formData.vegan,
+      glutenFree: formData.glutenFree,
+      printerRoute: formData.printerRoute,
+      available: formData.available,
+    });
+  };
+
+  const handleDelete = () => {
+    if (confirm('Tem certeza que deseja excluir este item do cardápio?')) {
+      onDelete(item.id);
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 md:p-6 pb-20 md:pb-6">
+      <div className="bg-card-dark border border-border-dark w-full max-w-2xl rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="flex justify-between items-center mb-6 md:mb-8">
+          <h3 className="text-2xl md:text-3xl font-black italic uppercase">Editar Item</h3>
+          <button onClick={handleDelete} className="px-4 py-2 bg-rose-500/20 text-rose-400 rounded-xl text-xs font-bold hover:bg-rose-500/30 transition-all flex items-center gap-2">
+            <span className="material-symbols-outlined text-sm">delete</span>
+            Excluir
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
+          <input required className="w-full bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white" placeholder="Nome do Prato" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <select className="bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white appearance-none" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+              {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+            <input required className="bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white" placeholder="Preço" type="number" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-1 gap-4">
+             <div className="bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white flex justify-between items-center flex-wrap gap-3">
+                <span className="text-xs uppercase font-bold tracking-widest text-slate-400">Rota de Produção:</span>
+                <select className="bg-[#1a2129] border border-white/10 rounded-xl px-4 py-2 text-xs font-bold uppercase" value={formData.printerRoute} onChange={e => setFormData({ ...formData, printerRoute: e.target.value as 'KITCHEN' | 'BAR' })}>
+                   <option value="KITCHEN">🔥 COZINHA</option>
+                   <option value="BAR">🍹 BAR</option>
+                </select>
+             </div>
+          </div>
           <input className="w-full bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white" placeholder="URL da Imagem" value={formData.image} onChange={e => setFormData({ ...formData, image: e.target.value })} />
           <textarea required className="w-full bg-background-dark border border-border-dark rounded-2xl p-3 md:p-4 text-white h-24 md:h-32 resize-none" placeholder="Descrição" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+          <div className="flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-xs font-bold uppercase text-slate-400 cursor-pointer">
+              <input type="checkbox" checked={formData.spicy} onChange={e => setFormData({ ...formData, spicy: e.target.checked })} className="accent-primary" />
+              🌶️ Apimentado
+            </label>
+            <label className="flex items-center gap-2 text-xs font-bold uppercase text-slate-400 cursor-pointer">
+              <input type="checkbox" checked={formData.vegan} onChange={e => setFormData({ ...formData, vegan: e.target.checked })} className="accent-primary" />
+              🥬 Vegano
+            </label>
+            <label className="flex items-center gap-2 text-xs font-bold uppercase text-slate-400 cursor-pointer">
+              <input type="checkbox" checked={formData.glutenFree} onChange={e => setFormData({ ...formData, glutenFree: e.target.checked })} className="accent-primary" />
+              🌾 Sem Glúten
+            </label>
+            <label className="flex items-center gap-2 text-xs font-bold uppercase text-slate-400 cursor-pointer">
+              <input type="checkbox" checked={formData.available} onChange={e => setFormData({ ...formData, available: e.target.checked })} className="accent-primary" />
+              ✅ Disponível
+            </label>
+          </div>
           <div className="flex gap-4 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-3 md:py-4 bg-white/5 rounded-2xl font-black uppercase tracking-widest text-xs md:text-sm">Cancelar</button>
             <button type="submit" className="flex-1 py-3 md:py-4 bg-primary rounded-2xl font-black uppercase tracking-widest text-white shadow-xl shadow-primary/20 text-xs md:text-sm">Salvar</button>
