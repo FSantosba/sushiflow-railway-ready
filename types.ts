@@ -66,9 +66,9 @@ export interface Order {
   clienteNome?: string;
   customer?: string; // Compatibility with LogisticsKanban
   motoboyNome?: string;
-  itens?: { productId: string; nome: string; quantidade: number; precoUnitario: number }[];
+  itens?: { productId: string; nome: string; quantidade: number; precoUnitario: number; printerRoute?: 'KITCHEN' | 'BAR' }[];
   platform?: string; // Kanban mock
-  items?: string[]; // Kanban mock
+  items?: any[]; // Kanban mock
   total?: number; // Kanban mock
   time?: string; // Kanban mock
   address?: string; // Kanban mock
@@ -241,6 +241,7 @@ export interface MenuItem {
   vegan?: boolean;
   glutenFree?: boolean;
   bestSeller?: boolean;
+  printerRoute?: 'KITCHEN' | 'BAR';
 }
 
 // ─── CMV: Custo de Mercadoria Vendida ───────────────────────────────────────
@@ -248,10 +249,11 @@ export interface MenuItem {
 export interface Ingredient {
   id: string;
   name: string;
-  unit: 'kg' | 'g' | 'L' | 'ml' | 'un' | 'cx';
-  costPerUnit: number; // R$ por unidade
-  stock: number;       // quantidade em estoque
-  minStock?: number;   // alerta de estoque mínimo
+  image?: string; // URL da foto do insumo
+  unit: 'kg' | 'g' | 'L' | 'ml' | 'un' | 'cx' | 'pct';
+  costPerUnit: number;
+  stock: number;
+  minStock?: number;
   category: 'proteina' | 'carboidrato' | 'molho' | 'embalagem' | 'misc';
 }
 

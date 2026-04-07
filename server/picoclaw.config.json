@@ -1,0 +1,17 @@
+{
+    "workspace": "SushiFlow-Auto",
+    "port": 3001,
+    "printer": {
+        "name": "SushiflowUSB",
+        "path": "\\\\127.0.0.1\\SushiflowUSB",
+        "auto_heal": true
+    },
+    "scripts": {
+        "on_start": [
+            "net use LPT2: /delete",
+            "net use LPT2: \\\\127.0.0.1\\SushiflowUSB /Persistent:Yes",
+            "echo 'Sistema Iniciado' > LPT2"
+        ],
+        "health_check": "net view \\\\127.0.0.1"
+    }
+}

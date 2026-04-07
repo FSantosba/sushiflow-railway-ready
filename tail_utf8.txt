@@ -1,0 +1,18 @@
+﻿ðŸ“¦ Banco local (SQLite) inicializado com sucesso.
+[SYNC] DATABASE_URL nÃ£o definido. SincronizaÃ§Ã£o em nuvem desativada.
+[WORKER] ðŸ”„ Worker de reimpressÃ£o iniciado (verificaÃ§Ã£o a cada 30s)
+[HEARTBEAT] Monitor de impressoras de rede ativo (ping a cada 4 min).
+
+ðŸš€ SushiFlow [LOCAL] na porta 3001
+   Local:   http://localhost:3001
+   Rede:    http://IP-DA-MAQUINA:3001
+   Fila:    http://localhost:3001/api/print/queue
+   Imp.:    http://localhost:3001/api/printers
+
+[API] GET /api/health
+[API] GET /api/config
+[API] GET /api/printers
+[API] GET /api/printers/status
+[WS] Cliente conectado: LaUQbgluTxjzVcBJAAAB
+[API] GET /api/health
+[API] GET /api/config

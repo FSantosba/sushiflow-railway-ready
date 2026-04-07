@@ -17,7 +17,7 @@ const getPageTitle = (view: string) => {
         case 'cardapio': return 'Gestão de Cardápio';
         case 'financeiro': return 'Dashboard Financeiro';
         case 'equipe': return 'Gestão de Equipe';
-        case 'impressao': return 'Configuração de Impressão';
+        case 'servidor': return 'Servidor & Impressoras';
         default: return 'SushiFlow';
     }
 };

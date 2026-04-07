@@ -55,31 +55,8 @@ const IngredientModal: React.FC<{
       alert('Digite o nome do insumo primeiro!');
       return;
     }
-    setSearchingImages(true);
-    setImageResults([]);
-    try {
-      const query = encodeURIComponent(form.name);
-      console.log('Buscando:', query);
-      const response = await fetch(`https://api.unsplash.com/search/photos?query=${query}&per_page=8&orientation=squarish`, {
-        headers: {
-          'Authorization': 'Client-ID AvqQ8Vk2gGqzJf9FpGxY3tNBhE6LBfXzWqJYJhV7B8M'
-        }
-      });
-      console.log('Response:', response);
-      const data = await response.json();
-      console.log('Data:', data);
-      if (data.results && data.results.length > 0) {
-        const urls = data.results.map((item: any) => item.urls?.small).filter(Boolean);
-        setImageResults(urls);
-      } else {
-        alert('Nenhuma imagem encontrada para "' + form.name + '"');
-      }
-    } catch (error) {
-      console.error('Erro ao buscar imagens:', error);
-      alert('Erro ao buscar imagens: ' + error);
-    } finally {
-      setSearchingImages(false);
-    }
+    const query = encodeURIComponent(form.name + ' ingrediente png');
+    window.open('https://www.google.com/search?tbm=isch&q=' + query, '_blank');
   };
 
   const selectImage = (url: string) => {

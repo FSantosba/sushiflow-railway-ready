@@ -76,7 +76,13 @@ const ServerContext = createContext<ServerContextData>({} as ServerContextData);
 export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [serverUrl, _setServerUrl] = useState<string>(() => {
     if (isCloudMode()) return '';
-    return localStorage.getItem(DEFAULT_URL_KEY) || 'http://localhost:3001';
+    let url = localStorage.getItem(DEFAULT_URL_KEY) || 'http://localhost:3001';
+    // Auto-correção para garantir que o antigo porto 3000 migre pro 3001
+    if (url.includes('localhost:3000') || url.includes('127.0.0.1:3000')) {
+        url = url.replace(':3000', ':3001');
+        localStorage.setItem(DEFAULT_URL_KEY, url);
+    }
+    return url;
   });
   const [isOnline, setIsOnline]   = useState(false);
   const [serverConfig, setServerConfig] = useState<Partial<ServerConfig>>({});

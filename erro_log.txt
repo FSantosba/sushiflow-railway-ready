@@ -1,0 +1,1 @@
+[SYNC] DATABASE_URL não definido. Sincronização em nuvem desativada.
