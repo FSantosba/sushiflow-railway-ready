@@ -18,7 +18,7 @@ const getMethodMeta = (method: string) =>
 
 const CashierView: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>(mockTransactions);
-  const [splitBill, setSplitBill] = useState({ total: 0, people: 1, tip: 10 });
+  const [splitBill, setSplitBill] = useState({ totalGeral: 0, people: 1, tip: 10 });
   const [isSangriaModalOpen, setIsSangriaModalOpen] = useState(false);
   const [isCloseCaixaOpen, setIsCloseCaixaOpen] = useState(false);
   const [sangriaValue, setSangriaValue] = useState('');
@@ -39,8 +39,8 @@ const CashierView: React.FC = () => {
   const cashReceived = totalsByMethod[PaymentMethod.CASH] || 0;
   const currentCash = cashReceived - totalOut;
 
-  const splitResult = splitBill.total > 0
-    ? (splitBill.total * (1 + splitBill.tip / 100)) / (splitBill.people || 1)
+  const splitResult = splitBill.totalGeral > 0
+    ? (splitBill.totalGeral * (1 + splitBill.tip / 100)) / (splitBill.people || 1)
     : null;
 
   // ✅ Sangria funcional
@@ -174,8 +174,8 @@ const CashierView: React.FC = () => {
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">R$</span>
                   <input
                     type="number"
-                    value={splitBill.total || ''}
-                    onChange={(e) => setSplitBill({ ...splitBill, total: Number(e.target.value) })}
+                    value={splitBill.totalGeral || ''}
+                    onChange={(e) => setSplitBill({ ...splitBill, totalGeral: Number(e.target.value) })}
                     placeholder="0,00"
                     className="w-full bg-background-dark border border-border-dark rounded-xl pl-12 pr-4 py-3 text-lg font-black text-white focus:ring-1 focus:ring-primary outline-none"
                   />

@@ -335,7 +335,7 @@ export async function printClosingReceipt(payload, printerKey = 'KITCHEN') {
       printer.bold(true);
       printer.setTextSize(1, 1);
       const totalLabel = 'TOTAL:';
-      const totalStr   = formatMoney(payload.total);
+      const totalStr   = formatMoney(payload.totalGeral);
       printer.println(`${totalLabel}${' '.repeat(Math.max(1, width - totalLabel.length - totalStr.length))}${totalStr}`);
       printer.bold(false);
       printer.setTextSize(0, 0);

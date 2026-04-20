@@ -7,6 +7,9 @@ import {
   getDb, getConfig, setConfig, getAllConfig,
   getPrinters, getPrinter, addPrinter, updatePrinter, deletePrinter,
   getPrintQueue, getPrintJob, resetPrintJob,
+  getReservations, upsertReservation, deleteReservation,
+  getWaitingList, upsertWaitingEntry, deleteWaitingEntry,
+  getReservationConfig, saveReservationConfig
 } from './db.js';
 import { printProductionTicket, printClosingReceipt, printTestPage, startHeartbeat, getPrinterList } from './printer.js';
 import { startPrintWorker, retryFailedJobs } from './printWorker.js';
@@ -68,7 +71,7 @@ app.get('/api/cloud-dashboard', async (req, res) => {
   try {
     const { rows: comandas }     = await cloudPool.query("SELECT * FROM cloud_comandas WHERE status = 'FECHADA' ORDER BY closed_at DESC LIMIT 50");
     const { rows: openComandas } = await cloudPool.query("SELECT * FROM cloud_comandas WHERE status = 'ABERTA'");
-    const faturamento = comandas.reduce((acc, c) => acc + (c.total || 0), 0);
+    const faturamento = comandas.reduce((acc, c) => acc + (c.total_geral || c.total || 0), 0);
     res.json({ ok: true, faturamento, tickets: comandas.length, comandasFechadas: comandas, comandasAbertas: openComandas.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -202,6 +205,93 @@ app.post('/api/printers/:key/test', async (req, res) => {
   const result = await printTestPage(req.params.key.toUpperCase());
   res.json(result);
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// ═══  RESERVAS E FILA DE ESPERA  ════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
+
+// GET /api/reservations
+app.get('/api/reservations', (_req, res) => {
+  try { res.json(getReservations()); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/reservations
+app.post('/api/reservations', (req, res) => {
+  try {
+    const reservation = req.body;
+    if (!reservation.id) reservation.id = `RES-${Date.now()}`;
+    upsertReservation(reservation);
+    
+    // Notifica todos os terminais (incluindo flag 'isPublic' se vier do link de reserva)
+    io.emit('new_reservation', { ...reservation, isPublic: req.body.isPublic || false });
+    
+    res.status(201).json({ ok: true, reservation });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DELETE /api/reservations/:id
+app.delete('/api/reservations/:id', (req, res) => {
+  try {
+    deleteReservation(req.params.id);
+    io.emit('reservation_deleted', req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/waiting-list
+app.get('/api/waiting-list', (_req, res) => {
+  try { res.json(getWaitingList()); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/waiting-list
+app.post('/api/waiting-list', (req, res) => {
+  try {
+    const entry = req.body;
+    if (!entry.id) entry.id = `WAIT-${Date.now()}`;
+    upsertWaitingEntry(entry);
+    io.emit('waiting_list_update', getWaitingList());
+    res.status(201).json({ ok: true, entry });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DELETE /api/waiting-list/:id
+app.delete('/api/waiting-list/:id', (req, res) => {
+  try {
+    deleteWaitingEntry(req.params.id);
+    io.emit('waiting_list_update', getWaitingList());
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/reservation-config
+app.get('/api/reservation-config', (_req, res) => {
+  try {
+    const config = getReservationConfig() || { slots: [], blockedDates: [], active: true };
+    res.json(config);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/reservation-config
+app.post('/api/reservation-config', (req, res) => {
+  try {
+    saveReservationConfig(req.body);
+    io.emit('reservation_config_update', req.body);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // ═══  FILA DE IMPRESSÃO  ═════════════════════════════════════════════════════
@@ -496,15 +586,16 @@ app.patch('/api/orders/items/:id/status', (req, res) => {
 app.post('/api/orders/close/:mesaId', async (req, res) => {
   const db = getDb();
   const { mesaId } = req.params;
-  const { paymentMethod, subtotal, serviceFee, total, printReceipt = true } = req.body;
+  const { paymentMethod, subtotal, serviceFee, totalGeral, total, printReceipt = true } = req.body;
+  const finalTotal = totalGeral || total;
 
   const comanda = db.prepare(`SELECT * FROM comandas WHERE mesa_id = ? AND status = 'ABERTA'`).get(mesaId);
   if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada' });
 
   db.prepare(`
-    UPDATE comandas SET status = 'FECHADA', closed_at = ?, subtotal = ?, total = ?,
+    UPDATE comandas SET status = 'FECHADA', closed_at = ?, subtotal = ?, total_geral = ?,
     payment_method = ?, sync_status = 'PENDING' WHERE id = ?
-  `).run(Date.now(), subtotal, total, paymentMethod, comanda.id);
+  `).run(Date.now(), subtotal, finalTotal, paymentMethod, comanda.id);
 
   db.prepare(`UPDATE mesas SET status = 'LIVRE', time_active = NULL WHERE id = ?`).run(mesaId);
 
@@ -519,7 +610,7 @@ app.post('/api/orders/close/:mesaId', async (req, res) => {
   let printResult = { ok: true, skipped: true };
   if (printReceipt) {
     const items = db.prepare(`SELECT * FROM comanda_itens WHERE comanda_id = ?`).all(comanda.id);
-    const payload = { mesaId: `Mesa ${mesaId}`, itens: items, subtotal, serviceFee, total, paymentMethod };
+    const payload = { mesaId: `Mesa ${mesaId}`, itens: items, subtotal, serviceFee, totalGeral: finalTotal, paymentMethod };
 
     printResult = await printClosingReceipt(payload, closingPrinterKey);
 

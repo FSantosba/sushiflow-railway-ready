@@ -12,7 +12,7 @@ const testData = {
 async function testPrinter() {
     console.log("🚀 Enviando pedido de teste para o motor...");
     try {
-        const response = await fetch('http://localhost:3001/api/enviar-pedido', {
+        const response = await fetch('http://localhost:3000/api/enviar-pedido', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(testData)

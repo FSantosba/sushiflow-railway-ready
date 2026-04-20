@@ -36,6 +36,20 @@ export default {
         info: {
           DEFAULT: '#3B82F6', // Blue 500
         }
+      },
+      animation: {
+        'pulse-slow': 'pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'card-flash': 'card-flash 2s ease-in-out infinite',
+      },
+      keyframes: {
+        'pulse-slow': {
+          '0%, 100%': { opacity: 1, transform: 'scale(1)' },
+          '50%': { opacity: 0.8, transform: 'scale(1.005)' },
+        },
+        'card-flash': {
+          '0%, 100%': { borderColor: 'rgba(244, 63, 94, 0.1)' },
+          '50%': { borderColor: 'rgba(244, 63, 94, 0.8)' },
+        }
       }
     },
   },

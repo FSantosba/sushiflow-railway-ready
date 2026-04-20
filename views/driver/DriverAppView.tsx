@@ -17,7 +17,8 @@ const PlatformBadge: React.FC<{ platform: string }> = ({ platform }) => {
     const map: Record<string, { label: string; cls: string }> = {
         'Direto':    { label: 'Próprio',  cls: 'bg-primary/20 text-primary border-primary/30' },
         'iFood':     { label: 'iFood',    cls: 'bg-rose-500/20 text-rose-400 border-rose-500/30' },
-        'UberEats':  { label: 'Uber',     cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+        '99Food':    { label: '99Food',   cls: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+        'KeeTa':     { label: 'KeeTa',    cls: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
         'Rappi':     { label: 'Rappi',    cls: 'bg-orange-400/20 text-orange-300 border-orange-400/30' },
         'Goomer':    { label: 'Goomer',   cls: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
     };
@@ -74,12 +75,12 @@ const ConfettiCelebration: React.FC = () => {
 // ─── Tipos internos ───────────────────────────────────────
 interface CompletedDelivery {
     id: string; customer: string; address: string;
-    total: number; platform: string; completedAt: number;
+    totalGeral: number; platform: string; completedAt: number;
 }
 
 // ─── Utilidades ──────────────────────────────────────────
 /** Plataformas que cobram o cliente online — motoboy não precisa cobrar */
-const PREPAID_PLATFORMS = new Set(['iFood', 'UberEats', 'Rappi', 'Goomer']);
+const PREPAID_PLATFORMS = new Set(['iFood', '99Food', 'KeeTa', 'Rappi', 'Goomer']);
 
 const TURNO_STORAGE_KEY = 'sushiflow_driver_turno';
 
@@ -104,7 +105,7 @@ function saveTurno(history: CompletedDelivery[]) {
 // ─── Componente Principal ─────────────────────────────────
 const DriverAppView: React.FC = () => {
     const { orders, updateOrder } = useOrders();
-    const { currentUser } = useAuth();
+    const { currentUser, logout } = useAuth();
 
     const [routes, setRoutes] = useState<RouteGroup[]>([]);
     const [routesLoading, setRoutesLoading] = useState(false);
@@ -138,7 +139,7 @@ const DriverAppView: React.FC = () => {
     // #1 — Filtro correto: usa o driverKey baseado no ID real
     const availableOrders = orders.filter(o =>
         o.status === OrderStatus.EM_PREPARO &&
-        (o.platform === 'Direto' || o.platform === 'iFood' || o.platform === 'UberEats' || o.platform === 'Rappi' || o.platform === 'Goomer')
+        ['Direto', 'iFood', '99Food', 'KeeTa', 'Rappi', 'Goomer'].includes(o.platform || 'Direto')
     );
 
     const activeRouteOrders = orders.filter(o =>
@@ -184,7 +185,7 @@ const DriverAppView: React.FC = () => {
             pendingSyncsRef.current = [];
             for (const item of totalToSync) {
                 try {
-                    await axios.post('http://localhost:3001/api/rastreamento', item);
+                    await axios.post('http://localhost:3000/api/rastreamento', item);
                 } catch {
                     if (pendingSyncsRef.current.length < 100) pendingSyncsRef.current.push(item);
                 }
@@ -196,7 +197,7 @@ const DriverAppView: React.FC = () => {
     const fetchWallet = async () => {
         if (!currentUser?.id) return;
         try {
-            const { data } = await axios.get(`http://localhost:3001/api/driver/wallet/${currentUser.id}`);
+            const { data } = await axios.get(`http://localhost:3000/api/driver/wallet/${currentUser.id}`);
             setWalletData(data);
         } catch (err) {
             console.error("Erro ao buscar carteira:", err);
@@ -239,11 +240,11 @@ const DriverAppView: React.FC = () => {
 
         setIsConfirming(true); // #5
         try {
-            await axios.post('http://localhost:3001/api/admin/confirm-delivery', { pedido_id: order.id });
+            await axios.post('http://localhost:3000/api/admin/confirm-delivery', { pedido_id: order.id });
             updateOrder(confirmingOrderId, { status: OrderStatus.ENTREGUE });
             const delivered: CompletedDelivery = {
                 id: order.id, customer: order.customer ?? '',
-                address: order.address ?? '', total: order.total ?? 0,
+                address: order.address ?? '', totalGeral: order.totalGeral ?? 0,
                 platform: order.platform ?? 'Direto', completedAt: Date.now(),
             };
             setTurnoHistory(prev => [...prev, delivered]);
@@ -274,7 +275,7 @@ const DriverAppView: React.FC = () => {
         if (!currentUser?.id || isWithdrawing) return;
         setIsWithdrawing(true);
         try {
-            const { data } = await axios.post(`http://localhost:3001/api/driver/withdraw/${currentUser.id}`);
+            const { data } = await axios.post(`http://localhost:3000/api/driver/withdraw/${currentUser.id}`);
             addToast(data.message || 'Saque solicitado com sucesso! 💸', 'success'); // #2
             fetchWallet();
         } catch (err: any) {
@@ -284,7 +285,7 @@ const DriverAppView: React.FC = () => {
         }
     };
 
-    const turnoTotal = turnoHistory.reduce((a, d) => a + d.total, 0);
+    const turnoTotal = turnoHistory.reduce((a, d) => a + d.totalGeral, 0);
 
     // ─────────────────────────────────────────────────────────
     return (
@@ -299,10 +300,15 @@ const DriverAppView: React.FC = () => {
                 <header className="px-6 py-6 bg-gradient-to-b from-black to-transparent shrink-0">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h1 className="text-xl font-black italic tracking-tighter text-white">
-                                SushiFlow<span className="text-orange-500">.</span>Driver
-                            </h1>
-                            <p className="text-xs text-slate-400 font-bold">Olá, {driverName} 👋</p>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-xl font-black italic tracking-tighter text-white">
+                                    SushiFlow<span className="text-orange-500">.</span>Driver
+                                </h1>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                                <p className="text-xs text-slate-400 font-bold">Olá, {driverName} 👋</p>
+                                <button onClick={() => { logout(); }} className="text-[10px] bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 px-2 py-0.5 rounded font-bold transition-colors">Sair</button>
+                            </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase border ${apiEnabled
@@ -403,12 +409,12 @@ const DriverAppView: React.FC = () => {
                                                     {isPrepaid ? (
                                                         <div>
                                                             <p className="text-[9px] text-emerald-600 font-black uppercase">✅ Pago pelo App</p>
-                                                            <span className="text-sm font-black italic text-slate-500 line-through">R$ {(order.total ?? 0).toFixed(2)}</span>
+                                                            <span className="text-sm font-black italic text-slate-500 line-through">R$ {(order.totalGeral ?? 0).toFixed(2)}</span>
                                                         </div>
                                                     ) : (
                                                         <div>
                                                             <p className="text-[10px] text-slate-500 font-bold uppercase">A Cobrar</p>
-                                                            <span className="text-lg font-black italic text-emerald-400">R$ {(order.total ?? 0).toFixed(2)}</span>
+                                                            <span className="text-lg font-black italic text-emerald-400">R$ {(order.totalGeral ?? 0).toFixed(2)}</span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -612,7 +618,7 @@ const DriverAppView: React.FC = () => {
                                 </div>
                             ) : (
                                 <div className="mb-6 py-2 px-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
-                                    <p className="text-amber-400 text-xs font-black">💵 A Cobrar: R$ {(order.total ?? 0).toFixed(2)}</p>
+                                    <p className="text-amber-400 text-xs font-black">💵 A Cobrar: R$ {(order.totalGeral ?? 0).toFixed(2)}</p>
                                 </div>
                             )}
                             <div className="flex gap-3">
@@ -668,7 +674,7 @@ const DriverAppView: React.FC = () => {
                                     <span className="text-sm font-black text-emerald-400 shrink-0">
                                         {PREPAID_PLATFORMS.has(d.platform) ? (
                                             <span className="text-slate-500 text-[10px]">Pago App</span>
-                                        ) : `R$ ${d.total.toFixed(2)}`}
+                                        ) : `R$ ${d.totalGeral.toFixed(2)}`}
                                     </span>
                                 </div>
                             ))}

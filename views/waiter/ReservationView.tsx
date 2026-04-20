@@ -3,12 +3,29 @@ import { Reservation, ReservationStatus, WaitingEntry } from '../../types';
 import { useReservations } from '../../context/ReservationContext';
 
 const ReservationView: React.FC = () => {
-  const { reservations, waitingList, addReservation, updateReservation, addWaitingEntry, removeWaitingEntry, updateWaitingEntry } = useReservations();
+  const { 
+    reservations, 
+    waitingList, 
+    config, 
+    addReservation, 
+    updateReservation, 
+    addWaitingEntry, 
+    removeWaitingEntry, 
+    updateWaitingEntry,
+    saveConfig 
+  } = useReservations();
   const [now, setNow] = useState(Date.now());
   const [showWaitModal, setShowWaitModal] = useState(false);
   const [showResModal, setShowResModal] = useState(false);
+  const [showSlotModal, setShowSlotModal] = useState(false);
+  const [showBlockModal, setShowBlockModal] = useState(false);
+
+  console.log('Slots atuais:', config.slots);
   const [editingRes, setEditingRes] = useState<Reservation | null>(null);
-  const [activeTab, setActiveTab] = useState<'fila' | 'agenda'>('fila');
+  const [activeTab, setActiveTab] = useState<'fila' | 'agenda' | 'config'>('fila');
+  const [newSlotTime, setNewSlotTime] = useState('19:00');
+  const [newSlotMax, setNewSlotMax] = useState('20');
+  const [newBlockDate, setNewBlockDate] = useState('');
 
   // Form States
   const [customerName, setCustomerName] = useState('');
@@ -160,6 +177,16 @@ const ReservationView: React.FC = () => {
         >
           Agenda
         </button>
+        <button
+          onClick={() => setActiveTab('config')}
+          className={`flex-1 py-3 text-xs font-bold uppercase tracking-widest border-b-2 transition-all ${
+            activeTab === 'config' 
+              ? 'border-amber-500 text-white' 
+              : 'border-transparent text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          Config
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row gap-4 lg:gap-6 p-3 md:p-6 pb-24 md:pb-6">
@@ -305,6 +332,100 @@ const ReservationView: React.FC = () => {
             ))}
           </div>
         </div>
+
+        {/* Configurações Section */}
+        <div className={`flex-1 flex-col gap-4 min-w-0 ${activeTab === 'config' ? 'flex' : 'hidden lg:flex'}`}>
+           <div className="flex items-center gap-2 px-2">
+              <span className="material-symbols-outlined text-amber-500 text-2xl">settings</span>
+              <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-white">Configurações de Reserva Pública</h3>
+           </div>
+
+           <div className="bg-[#161b22] border border-white/5 rounded-3xl p-6 space-y-8 overflow-y-auto custom-scrollbar">
+              {/* Status Global */}
+              <div className="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
+                <div>
+                  <h4 className="font-black text-white">Status das Reservas Online</h4>
+                  <p className="text-xs text-slate-500">Permitir que clientes façam reservas pelo link público.</p>
+                </div>
+                <button 
+                  onClick={() => saveConfig({ ...config, active: !config.active })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.active ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.active ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              {/* Horários e Vagas */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Horários Disponíveis (Slots)</h4>
+                  <button 
+                    onClick={() => { setNewSlotTime('19:00'); setNewSlotMax('20'); setShowSlotModal(true); }}
+                    className="text-primary text-[10px] font-black uppercase tracking-widest hover:underline"
+                  >
+                    + Adicionar
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {(config.slots || []).map((slot, idx) => (
+                    <div key={idx} className="bg-black/30 p-3 rounded-xl border border-white/5 flex justify-between items-center group">
+                      <div>
+                        <p className="text-lg font-black text-white">{slot.time}</p>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold">Máx: {slot.maxPeople} pess.</p>
+                      </div>
+                      <button 
+                        onClick={() => saveConfig({ ...config, slots: config.slots.filter((_, i) => i !== idx) })}
+                        className="text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <span className="material-symbols-outlined text-sm">delete</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Datas Bloqueadas */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Datas de Bloqueio (Feriados/Eventos)</h4>
+                  <button 
+                    onClick={() => { setNewBlockDate(new Date().toISOString().split('T')[0]); setShowBlockModal(true); }}
+                    className="text-primary text-[10px] font-black uppercase tracking-widest hover:underline"
+                  >
+                    + Bloquear Data
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(config.blockedDates || []).map((date, idx) => (
+                    <div key={idx} className="bg-rose-500/10 border border-rose-500/20 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                       <span className="text-xs font-black text-rose-500">{date}</span>
+                       <button onClick={() => saveConfig({ ...config, blockedDates: config.blockedDates.filter((_, i) => i !== idx) })}>
+                          <span className="material-symbols-outlined text-[10px] text-rose-500">close</span>
+                       </button>
+                    </div>
+                  ))}
+                  {(!config.blockedDates || config.blockedDates.length === 0) && <p className="text-xs text-slate-600 italic">Nenhuma data bloqueada.</p>}
+                </div>
+              </div>
+
+              {/* Link Público */}
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-2xl">
+                 <h4 className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">Seu Link Público</h4>
+                 <div className="flex gap-2">
+                    <input readOnly value={`${window.location.origin}/reservar`} className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-300 font-mono" />
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/reservar`);
+                        alert('Link copiado!');
+                      }}
+                      className="bg-primary px-3 rounded-lg text-white"
+                    >
+                      <span className="material-symbols-outlined text-sm">content_copy</span>
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
       </div>
 
       {/* Modal Nova Reserva/Edição */}
@@ -375,6 +496,70 @@ const ReservationView: React.FC = () => {
                 <button type="submit" className="flex-1 py-3.5 sm:py-3 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-bold transition-colors shadow-lg shadow-primary/20">Adicionar à Fila</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Adicionar Slot */}
+      {showSlotModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-[#12161b] w-full max-w-sm rounded-3xl border border-white/10 p-5 md:p-6 shadow-2xl">
+            <h2 className="text-lg font-black text-white mb-5 uppercase tracking-wider">Novo Horário</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-1 block">Horário</label>
+                <input type="time" value={newSlotTime} onChange={e => setNewSlotTime(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-primary outline-none transition-colors" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-1 block">Capacidade (Pessoas)</label>
+                <input type="number" min="1" value={newSlotMax} onChange={e => setNewSlotMax(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-primary outline-none transition-colors" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setShowSlotModal(false)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-bold transition-colors">Cancelar</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (newSlotTime && newSlotMax) {
+                      saveConfig({ ...config, slots: [...(config.slots || []), { time: newSlotTime, maxPeople: parseInt(newSlotMax) }] });
+                      setShowSlotModal(false);
+                    }
+                  }} 
+                  className="flex-1 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-bold transition-colors"
+                >
+                  Adicionar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Bloquear Data */}
+      {showBlockModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-[#12161b] w-full max-w-sm rounded-3xl border border-white/10 p-5 md:p-6 shadow-2xl">
+            <h2 className="text-lg font-black text-white mb-5 uppercase tracking-wider">Bloquear Data</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-1 block">Data</label>
+                <input type="date" value={newBlockDate} onChange={e => setNewBlockDate(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-rose-500 outline-none transition-colors" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setShowBlockModal(false)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-bold transition-colors">Cancelar</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (newBlockDate) {
+                      saveConfig({ ...config, blockedDates: [...(config.blockedDates || []), newBlockDate] });
+                      setShowBlockModal(false);
+                    }
+                  }} 
+                  className="flex-1 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-bold transition-colors"
+                >
+                  Bloquear
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

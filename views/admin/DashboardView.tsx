@@ -47,7 +47,7 @@ const DashboardView: React.FC = () => {
 
     const filteredTickets = closedTickets.filter(t => now - t.closedAt < periodMs);
     const isCloud = isCloudMode();
-    const faturamentoHoje = isCloud ? (cloudData?.faturamento || 0) : filteredTickets.reduce((acc, t) => acc + t.total, 0);
+    const faturamentoHoje = isCloud ? (cloudData?.faturamento || 0) : filteredTickets.reduce((acc, t) => acc + (t.totalGeral || t.total || 0), 0);
     const ticketsHoje = isCloud ? (cloudData?.tickets || 0) : filteredTickets.length;
     const ticketMedio = ticketsHoje > 0 ? faturamentoHoje / ticketsHoje : 0;
     const ticketsExibidos = isCloud ? (cloudData?.comandasFechadas || []) : closedTickets;
@@ -297,7 +297,7 @@ const DashboardView: React.FC = () => {
                                             <PaymentBadge method={ticket.paymentMethod} />
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className="text-sm font-black text-emerald-500">R$ {ticket.total.toFixed(2)}</span>
+                                            <span className="text-sm font-black text-emerald-500">R$ {(ticket.totalGeral || ticket.total || 0).toFixed(2)}</span>
                                         </td>
                                     </tr>
                                 ))}

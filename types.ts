@@ -69,7 +69,6 @@ export interface Order {
   itens?: { productId: string; nome: string; quantidade: number; precoUnitario: number; printerRoute?: 'KITCHEN' | 'BAR' }[];
   platform?: string; // Kanban mock
   items?: any[]; // Kanban mock
-  total?: number; // Kanban mock
   time?: string; // Kanban mock
   address?: string; // Kanban mock
   deliveryMan?: string; // Driver app mock — stores driverKey
@@ -104,7 +103,7 @@ export interface ClosedTicket {
   closedAt: number; // timestamp ms
   items: { name: string; qty: number; price: number; prepTimeMs?: number }[];
   subtotal: number;
-  total: number;
+  totalGeral: number;
   paymentMethod: string;
 }
 
@@ -120,7 +119,7 @@ export interface Table {
   status: TableStatus;
   capacity: number;
   timeActive?: string;
-  currentTotal?: number;
+  totalGeral?: number;
 }
 
 export enum ReservationStatus {

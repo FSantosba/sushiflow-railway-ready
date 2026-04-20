@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, ROLE_LABELS } from '../context/AuthContext';
 
 interface SidebarProps {
     activeView: string;
@@ -9,38 +9,36 @@ interface SidebarProps {
 }
 
 const menuItems = [
-    { id: 'admin_dashboard', label: 'Painel Admin', icon: 'monitoring', roles: ['manager'] },
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['manager', 'cashier'] },
-    { id: 'garcom', label: 'App Garçom', icon: 'restaurant', roles: ['manager', 'waiter'] },
-    { id: 'pdv', label: 'PDV', icon: 'point_of_sale', roles: ['manager', 'cashier'] },
-    { id: 'delivery_app', label: 'Delivery App', icon: 'smartphone', roles: ['manager'] },
-    { id: 'delivery_manager', label: 'Delivery Manager', icon: 'storefront', roles: ['manager'] },
-    { id: 'caixa', label: 'Caixa', icon: 'payments', roles: ['manager', 'cashier'] },
-    { id: 'mesas', label: 'Mesas', icon: 'table_restaurant', roles: ['manager', 'waiter'] },
-    { id: 'reservas', label: 'Reservas', icon: 'event_seat', roles: ['manager', 'waiter'] },
-    { id: 'cozinha', label: 'Painel KDS', icon: 'skillet', roles: ['manager', 'kitchen'] },
-    { id: 'logistica', label: 'Log\u00edstica', icon: 'local_shipping', roles: ['manager'] },
-    { id: 'driver_app', label: 'App do Motoboy', icon: 'two_wheeler', roles: ['manager', 'driver'] },
-    { id: 'estoque', label: 'Estoque', icon: 'inventory_2', roles: ['manager'] },
-    { id: 'compras', label: 'Compras', icon: 'shopping_cart', roles: ['manager'] },
-    { id: 'cardapio', label: 'Card\u00e1pio', icon: 'restaurant_menu', roles: ['manager', 'waiter'] },
-    { id: 'cmv', label: 'Gest\u00e3o CMV', icon: 'price_check', roles: ['manager'] },
-    { id: 'financeiro', label: 'Financeiro (Antigo)', icon: 'bar_chart', roles: ['manager'] },
-    { id: 'equipe', label: 'Equipe', icon: 'groups', roles: ['manager'] },
-    { id: 'servidor', label: 'Servidor & Impressoras', icon: 'dns', roles: ['manager'] },
+    { id: 'admin_dashboard', label: 'Painel Admin', icon: 'monitoring' },
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { id: 'garcom', label: 'App Garçom', icon: 'restaurant' },
+    { id: 'pdv', label: 'PDV', icon: 'point_of_sale' },
+    { id: 'delivery_app', label: 'Delivery App', icon: 'smartphone' },
+    { id: 'delivery_manager', label: 'Delivery Manager', icon: 'storefront' },
+    { id: 'caixa', label: 'Caixa', icon: 'payments' },
+    { id: 'mesas', label: 'Mesas', icon: 'table_restaurant' },
+    { id: 'reservas', label: 'Reservas', icon: 'event_seat' },
+    { id: 'cozinha', label: 'Painel KDS', icon: 'skillet' },
+    { id: 'logistica', label: 'Log\u00edstica', icon: 'local_shipping' },
+    { id: 'driver_app', label: 'App do Motoboy', icon: 'two_wheeler' },
+    { id: 'estoque', label: 'Estoque', icon: 'inventory_2' },
+    { id: 'compras', label: 'Compras', icon: 'shopping_cart' },
+    { id: 'cardapio', label: 'Card\u00e1pio', icon: 'restaurant_menu' },
+    { id: 'cmv', label: 'Gest\u00e3o CMV', icon: 'price_check' },
+    { id: 'financeiro', label: 'Financeiro', icon: 'bar_chart' },
+    { id: 'usuarios', label: 'Controle de Acessos', icon: 'manage_accounts' },
+    { id: 'servidor', label: 'Servidor & Sys', icon: 'dns' },
 ];
-
-const ROLE_LABELS: Record<string, string> = {
-    manager: 'Gerente',
-    waiter: 'Gar\u00e7om',
-    kitchen: 'Cozinha',
-    cashier: 'Caixa',
-};
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, isOpen, onClose }) => {
     const { currentUser, logout } = useAuth();
     const userRole = currentUser?.role || 'manager';
-    const visibleItems = menuItems.filter(item => item.roles.includes(userRole));
+    
+    const visibleItems = menuItems.filter(item => {
+        if (!currentUser?.allowedScreens) return false;
+        if (currentUser.allowedScreens.includes('all')) return true;
+        return currentUser.allowedScreens.includes(item.id);
+    });
 
     return (
         <>

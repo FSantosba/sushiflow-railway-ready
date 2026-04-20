@@ -208,7 +208,7 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return next;
         });
         setTables(prev => prev.map(t => {
-            if (t.id === fromId) return { ...t, status: TableStatus.FREE, timeActive: undefined, currentTotal: undefined };
+            if (t.id === fromId) return { ...t, status: TableStatus.FREE, timeActive: undefined, totalGeral: undefined };
             if (t.id === toId) return { ...t, status: TableStatus.OCCUPIED, timeActive: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
             return t;
         }));
@@ -232,7 +232,7 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     prepTimeMs: i.readyAt ? i.readyAt - i.createdAt : undefined
                 })),
                 subtotal,
-                total,
+                totalGeral: total,
                 paymentMethod,
             };
             setClosedTickets(prev => [ticket, ...prev].slice(0, 100)); // Guardar últimos 100
@@ -246,7 +246,7 @@ export const TableProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
 
         setTables(prev => prev.map(t =>
-            t.id === tableId ? { ...t, status: TableStatus.FREE, timeActive: undefined, currentTotal: undefined } : t
+            t.id === tableId ? { ...t, status: TableStatus.FREE, timeActive: undefined, totalGeral: undefined } : t
         ));
     };
 

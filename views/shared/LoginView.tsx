@@ -1,19 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth, AppUser, UserRole, ROLE_LABELS } from '../../context/AuthContext';
 import { playErrorSound, playSuccessSound } from '../../utils/sounds';
 
-const ROLE_ICONS: Record<UserRole, string> = {
+const ROLE_ICONS: Record<string, string> = {
     manager: 'admin_panel_settings',
     waiter: 'emoji_food_beverage',
     kitchen: 'skillet',
     cashier: 'point_of_sale',
+    driver: 'two_wheeler',
+    delivery_manager: 'storefront',
 };
 
-const ROLE_COLORS: Record<UserRole, string> = {
+const ROLE_COLORS: Record<string, string> = {
     manager: 'from-orange-500 to-red-700',
     waiter: 'from-cyan-500 to-blue-700',
     kitchen: 'from-emerald-500 to-green-700',
     cashier: 'from-purple-500 to-violet-700',
+    driver: 'from-amber-500 to-orange-700',
+    delivery_manager: 'from-teal-500 to-cyan-700',
 };
 
 const LoginView: React.FC = () => {
@@ -54,6 +58,23 @@ const LoginView: React.FC = () => {
         setPin(p => p.slice(0, -1));
         setError(false);
     };
+
+    useEffect(() => {
+        if (!selectedUser || success) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Backspace') {
+                handleBackspace();
+                return;
+            }
+            if (/^[0-9]$/.test(e.key)) {
+                handleDigit(e.key);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedUser, success, pin]);
 
     return (
         <div className="h-screen w-full flex bg-[#060a0e] overflow-hidden relative">

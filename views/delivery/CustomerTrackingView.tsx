@@ -36,7 +36,7 @@ const CustomerTrackingView: React.FC = () => {
 
         const fetchPosition = async () => {
             try {
-                const { data } = await axios.get(`http://localhost:3001/api/rastreamento/${trackedOrder.id}`);
+                const { data } = await axios.get(`http://localhost:3000/api/rastreamento/${trackedOrder.id}`);
                 const newPos = { lat: parseFloat(data.lat), lng: parseFloat(data.lng) };
                 
                 if (!lastPosRef.current) {

@@ -2,9 +2,11 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Order, OrderStatus } from '../../types';
 import { useOrders } from '../../context/OrdersContext';
+import { useServer } from '../../context/ServerContext';
 
 const LogisticsKanban: React.FC = () => {
   const { orders, addOrder, updateOrder, removeOrder } = useOrders();
+  const { serverUrl } = useServer();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [autoPrint, setAutoPrint] = useState(false);
@@ -17,7 +19,14 @@ const LogisticsKanban: React.FC = () => {
   const knownIds = useRef<string[]>(orders.map(o => o.id));
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [activePlatform, setActivePlatform] = useState<'Todas' | 'iFood' | 'UberEats' | 'Direto'>('Todas');
+  const [activePlatform, setActivePlatform] = useState<'Todas' | 'iFood' | '99Food' | 'KeeTa' | 'Direto'>('Todas');
+
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 30000); // Atualiza a cada 30s
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -71,23 +80,33 @@ const LogisticsKanban: React.FC = () => {
       enderecoEntrega: { rua: 'Rua Exemplo', numero: '123' },
       createdAt: new Date().toISOString(),
       customer: `Cliente ${Math.floor(Math.random() * 100)}`,
-      platform: ['iFood', 'UberEats', 'Direto'][Math.floor(Math.random() * 3)] as any,
+      platform: ['iFood', '99Food', 'KeeTa', 'Direto'][Math.floor(Math.random() * 4)] as any,
       items: ['1x Combinado Sushi', '2x Temaki Salmão'],
-      total: 85.50,
       time: 'agora',
       address: 'Rua Exemplo, 123 - Centro'
     };
     addOrder(newOrder);
   };
 
-  const handleAcceptOrder = (order: Order) => {
+  const handleAcceptOrder = async (order: Order) => {
     updateOrder(order.id, { status: OrderStatus.PENDING });
+    
     if (autoPrint) {
-      console.log(`Imprimindo pedido #${order.id}...`);
+      console.log(`Imprimindo pedido #${order.id}... via ${serverUrl}`);
       // Simulação visual de impressão
       const toastId = Math.random().toString();
       setToasts(prev => [...prev, { id: toastId, customer: 'Imprimindo...', orderId: order.id }]);
       setTimeout(() => setToasts(prev => prev.filter(t => t.id !== toastId)), 3000);
+
+      try {
+        await fetch(`${serverUrl}/api/print/production`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: order.id, ...order })
+        });
+      } catch (err) {
+        console.error("Falha ao imprimir automaticamente:", err);
+      }
     }
   };
 
@@ -97,7 +116,7 @@ const LogisticsKanban: React.FC = () => {
     }
   };
 
-  const handleAdvanceStatus = (order: Order) => {
+  const handleAdvanceStatus = async (order: Order) => {
     let nextStatus = order.status;
     if (order.status === OrderStatus.NEW) nextStatus = OrderStatus.PENDING;
     else if (order.status === OrderStatus.PENDING) nextStatus = OrderStatus.PREPARING;
@@ -106,6 +125,19 @@ const LogisticsKanban: React.FC = () => {
     
     if (nextStatus !== order.status) {
       updateOrder(order.id, { status: nextStatus });
+
+      if (order.status === OrderStatus.NEW && autoPrint) {
+        console.log(`Imprimindo pedido #${order.id}... via ${serverUrl} (viva modal)`);
+        try {
+          await fetch(`${serverUrl}/api/print/production`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: order.id, ...order })
+          });
+        } catch (err) {
+          console.error("Falha ao imprimir automaticamente no modal:", err);
+        }
+      }
     }
     setSelectedOrder(null);
   };
@@ -168,7 +200,7 @@ const LogisticsKanban: React.FC = () => {
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 xl:gap-4">
           <div className="flex flex-wrap items-center gap-2 md:gap-3">
             <div className="flex bg-black/40 p-1 rounded-xl border border-white/5 overflow-x-auto no-scrollbar">
-              {['Todas', 'iFood', 'UberEats', 'Direto'].map((plt) => (
+              {['Todas', 'iFood', '99Food', 'KeeTa', 'Direto'].map((plt) => (
                 <button
                   key={plt}
                   onClick={() => setActivePlatform(plt as any)}
@@ -184,6 +216,7 @@ const LogisticsKanban: React.FC = () => {
               className={`size-9 rounded-xl border transition-all flex items-center justify-center ${isMuted ? 'bg-rose-500/10 border-rose-500/30 text-rose-500' : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
                 }`}
             >
+              <span className="material-symbols-outlined text-lg">{isMuted ? 'volume_off' : 'volume_up'}</span>
             </button>
 
             <button
@@ -276,26 +309,39 @@ const LogisticsKanban: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-3 md:gap-4 flex-1 md:overflow-y-auto custom-scrollbar md:pr-2 pb-4 md:pb-10">
-                {colOrders.map(order => (
-                  <div
-                    key={order.id}
-                    onClick={() => setSelectedOrder(order)}
-                    className={`bg-[#161b22] border border-white/5 rounded-3xl p-5 shadow-2xl hover:border-primary/40 transition-all cursor-pointer group animate-in fade-in slide-in-from-bottom-3 ${newOrderIds.has(order.id) ? 'animate-card-flash border-primary' : ''
-                      }`}
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="size-8 bg-black/40 rounded-xl flex items-center justify-center border border-white/5 text-slate-500 group-hover:text-primary transition-colors">
-                          <span className="material-symbols-outlined text-lg">{col.icon}</span>
-                        </div>
+                {colOrders.map(order => {
+                  const createdAt = order.createdAt ? new Date(order.createdAt).getTime() : now;
+                  const minutesElapsed = Math.floor((now - createdAt) / 60000);
+                  const isStale = (order.status === OrderStatus.NEW || order.status === OrderStatus.PENDING) && minutesElapsed >= 15;
+
+                  return (
+                    <div
+                      key={order.id}
+                      onClick={() => setSelectedOrder(order)}
+                      className={`bg-[#161b22] border rounded-3xl p-5 shadow-2xl hover:border-primary/40 transition-all cursor-pointer group animate-in fade-in slide-in-from-bottom-3 ${
+                        isStale ? 'border-rose-500 animate-pulse-slow' : 'border-white/5'
+                      } ${newOrderIds.has(order.id) ? 'animate-card-flash border-primary' : ''
+                        }`}
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`size-8 bg-black/40 rounded-xl flex items-center justify-center border border-white/5 transition-colors ${
+                              isStale ? 'text-rose-500' : 'text-slate-500 group-hover:text-primary'
+                            }`}>
+                            <span className="material-symbols-outlined text-lg">
+                              {isStale ? 'local_fire_department' : col.icon}
+                            </span>
+                          </div>
                         <div>
                           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">#{order.id}</p>
                           <p className="text-[9px] font-bold text-slate-600 uppercase mt-1">{order.platform}</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] font-black text-slate-500 uppercase">{order.time}</span>
-                      </div>
+                        <div className="text-right flex flex-col items-end">
+                          <span className={`text-[10px] font-black uppercase ${isStale ? 'text-rose-500 animate-pulse' : 'text-slate-500'}`}>
+                            {isStale ? `${minutesElapsed} min mofando` : order.time}
+                          </span>
+                        </div>
                     </div>
 
                     <h4 className="text-base sm:text-lg font-black text-white leading-tight mb-4 group-hover:text-primary transition-colors truncate">
@@ -321,7 +367,7 @@ const LogisticsKanban: React.FC = () => {
                           {order.address?.split('-')[0] || 'Balcão'}
                         </span>
                       </div>
-                      <span className="text-sm font-black text-white italic">R$ {(order.total || order.totalGeral || 0).toFixed(2)}</span>
+                      <span className="text-sm font-black text-white italic">R$ {(order.totalGeral || 0).toFixed(2)}</span>
                     </div>
 
                     {col.status === OrderStatus.NEW && (
@@ -341,7 +387,8 @@ const LogisticsKanban: React.FC = () => {
                       </div>
                     )}
                   </div>
-                ))}
+                );
+              })}
 
                 {/* EMPTY STATE POR COLUNA */}
                 {colOrders.length === 0 && searchQuery && (
@@ -383,8 +430,17 @@ const LogisticsKanban: React.FC = () => {
                 </button>
               )}
               <button 
-                onClick={() => {
+                onClick={async () => {
                   setToasts(prev => [...prev, { id: Math.random().toString(), customer: 'Imprimindo...', orderId: selectedOrder.id }]);
+                  try {
+                    await fetch(`${serverUrl}/api/print/production`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ orderId: selectedOrder.id, ...selectedOrder })
+                    });
+                  } catch (err) {
+                    console.error("Falha ao imprimir manualmente:", err);
+                  }
                   setTimeout(() => setSelectedOrder(null), 1000);
                 }}
                 className="w-full sm:flex-1 py-3 md:py-4 bg-white/5 hover:bg-white/10 transition-colors text-white font-black text-xs md:text-sm uppercase rounded-xl md:rounded-2xl border border-white/10">

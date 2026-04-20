@@ -36,6 +36,7 @@ function initSchema() {
       closed_at INTEGER,
       subtotal REAL DEFAULT 0,
       total REAL DEFAULT 0,
+      total_geral REAL DEFAULT 0,
       payment_method TEXT,
       sync_status TEXT DEFAULT 'PENDING',
       cloud_id TEXT
@@ -107,6 +108,38 @@ function initSchema() {
       created_at INTEGER DEFAULT (strftime('%s','now') * 1000),
       printed_at INTEGER
     );
+
+    -- Reservas agendadas
+    CREATE TABLE IF NOT EXISTS reservations (
+      id TEXT PRIMARY KEY,
+      customer TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      people INTEGER NOT NULL,
+      time TEXT NOT NULL,
+      date TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'AGUARDANDO',
+      table_preference TEXT,
+      notes TEXT,
+      created_at INTEGER DEFAULT (strftime('%s','now') * 1000)
+    );
+
+    -- Fila de espera
+    CREATE TABLE IF NOT EXISTS waiting_list (
+      id TEXT PRIMARY KEY,
+      customer TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      people INTEGER NOT NULL,
+      start_time INTEGER NOT NULL,
+      needs_high_chair INTEGER DEFAULT 0,
+      notified INTEGER DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'AGUARDANDO'
+    );
+
+    -- Configuração de disponibilidade para reservas
+    CREATE TABLE IF NOT EXISTS reservation_config (
+      id TEXT PRIMARY KEY, -- 'AVAILABILITY'
+      config_json TEXT NOT NULL -- Contém slots, blockedDates, etc.
+    );
   `);
 
   // ─── Migrações seguras para bancos existentes ────────────────────────────
@@ -114,6 +147,7 @@ function initSchema() {
 
   safeAlter("ALTER TABLE comandas ADD COLUMN sync_status TEXT DEFAULT 'PENDING'");
   safeAlter("ALTER TABLE comandas ADD COLUMN cloud_id TEXT");
+  safeAlter("ALTER TABLE comandas ADD COLUMN total_geral REAL DEFAULT 0");
   safeAlter("ALTER TABLE comanda_itens ADD COLUMN sync_status TEXT DEFAULT 'PENDING'");
   safeAlter("ALTER TABLE comanda_itens ADD COLUMN cloud_id TEXT");
 
@@ -225,4 +259,68 @@ export function getPrintJob(id) {
 export function resetPrintJob(id) {
   const db = getDb();
   db.prepare(`UPDATE print_jobs SET status = 'ERROR', retry_count = 0, last_error = 'Retry manual solicitado' WHERE id = ?`).run(id);
+}
+
+// ─── Helpers de Reservas ────────────────────────────────────────────────────
+export function getReservations() {
+  const db = getDb();
+  return db.prepare('SELECT * FROM reservations ORDER BY date ASC, time ASC').all();
+}
+
+export function upsertReservation(res) {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO reservations (id, customer, phone, people, time, date, status, table_preference, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      customer=excluded.customer, phone=excluded.phone, people=excluded.people,
+      time=excluded.time, date=excluded.date, status=excluded.status,
+      table_preference=excluded.table_preference, notes=excluded.notes
+  `).run(res.id, res.customer, res.phone, res.people, res.time, res.date, res.status, res.tablePreference || null, res.notes || null);
+}
+
+export function deleteReservation(id) {
+  const db = getDb();
+  db.prepare('DELETE FROM reservations WHERE id = ?').run(id);
+}
+
+// ─── Helpers de Fila de Espera ──────────────────────────────────────────────
+export function getWaitingList() {
+  const db = getDb();
+  return db.prepare('SELECT * FROM waiting_list WHERE status != "FINALIZADO" ORDER BY start_time ASC').all();
+}
+
+export function upsertWaitingEntry(entry) {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO waiting_list (id, customer, phone, people, start_time, needs_high_chair, notified, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      customer=excluded.customer, phone=excluded.phone, people=excluded.people,
+      needs_high_chair=excluded.needs_high_chair, notified=excluded.notified, status=excluded.status
+  `).run(entry.id, entry.customer, entry.phone, entry.people, entry.startTime, entry.needsHighChair ? 1 : 0, entry.notified ? 1 : 0, entry.status || 'AGUARDANDO');
+}
+
+export function deleteWaitingEntry(id) {
+  const db = getDb();
+  db.prepare('DELETE FROM waiting_list WHERE id = ?').run(id);
+}
+
+// ─── Helpers de Config de Reserva ──────────────────────────────────────────
+export function getReservationConfig() {
+  const db = getDb();
+  const row = db.prepare('SELECT config_json FROM reservation_config WHERE id = "AVAILABILITY"').get();
+  const defaultConfig = { slots: [], blockedDates: [], active: true };
+  if (!row) return defaultConfig;
+  try {
+    const config = JSON.parse(row.config_json);
+    return { ...defaultConfig, ...config };
+  } catch (err) {
+    return defaultConfig;
+  }
+}
+
+export function saveReservationConfig(config) {
+  const db = getDb();
+  db.prepare('INSERT OR REPLACE INTO reservation_config (id, config_json) VALUES ("AVAILABILITY", ?)').run(JSON.stringify(config));
 }

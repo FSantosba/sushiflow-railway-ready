@@ -17,7 +17,7 @@ import MenuView from './views/shared/MenuView';
 import PDVView from './views/payment/PDVView';
 import PrinterSettings from './views/shared/PrinterSettings';
 import CashierView from './views/payment/CashierView';
-import TeamManagement from './views/admin/TeamManagement';
+import UserManagement from './views/admin/UserManagement';
 import ReservationView from './views/waiter/ReservationView';
 import DashboardView from './views/admin/DashboardView';
 import CMVView from './views/shared/CMVView';
@@ -27,6 +27,7 @@ import DeliveryAppView from './views/delivery/DeliveryAppView';
 import DriverAppView from './views/driver/DriverAppView';
 import AdminDashboardView from './views/admin/AdminDashboardView';
 import DeliveryManagerView from './views/delivery/DeliveryManagerView';
+import PublicReservationView from './views/public/PublicReservationView';
 import CloudLockView from './views/shared/CloudLockView';
 import { isCloudMode } from './utils/env';
 
@@ -36,14 +37,19 @@ const AppContent: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (currentUser?.role === 'kitchen') {
-      setActiveView('cozinha');
-    } else if (currentUser?.role === 'cashier') {
-      setActiveView('caixa');
-    } else if (currentUser?.role === 'waiter') {
-      setActiveView('garcom');
+    if (currentUser?.allowedScreens && currentUser.allowedScreens.length > 0) {
+      if (!currentUser.allowedScreens.includes('all')) {
+        setActiveView(currentUser.allowedScreens[0]);
+      } else {
+        setActiveView('dashboard');
+      }
     }
   }, [currentUser?.id]);
+
+  // Roteamento público para link de reserva
+  if (window.location.pathname === '/reservar') {
+    return <PublicReservationView />;
+  }
 
   if (!currentUser) {
     return <LoginView />;
@@ -64,7 +70,7 @@ const AppContent: React.FC = () => {
       case 'compras': return <PurchasingDashboard />;
       case 'cardapio': return <MenuView />;
       case 'servidor': return <PrinterSettings />;
-      case 'equipe': return <TeamManagement />;
+      case 'usuarios': return <UserManagement />;
       case 'cmv': return <CMVView />;
       case 'garcom': return <WaiterView />;
       case 'delivery_app': return <DeliveryAppView onNavigate={setActiveView} />;
@@ -75,7 +81,7 @@ const AppContent: React.FC = () => {
   };
 
   // Views de app mobile renderizam em tela cheia, sem Sidebar/Header do admin
-  const isFullScreenApp = activeView === 'delivery_app' || activeView === 'driver_app';
+  const isFullScreenApp = activeView === 'delivery_app' || activeView === 'driver_app' || activeView === 'garcom';
 
   if (isFullScreenApp) {
     return (

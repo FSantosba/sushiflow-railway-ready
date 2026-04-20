@@ -20,7 +20,7 @@ const AdminDashboardView: React.FC = () => {
 
     const fetchData = async () => {
         try {
-            const apiBase = 'http://localhost:3001';
+            const apiBase = 'http://localhost:3000';
             const [s, k, p, t] = await Promise.all([
                 axios.get(`${apiBase}/api/admin/stats`),
                 axios.get(`${apiBase}/api/admin/kitchen`),

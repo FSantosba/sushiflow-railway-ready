@@ -305,9 +305,14 @@ const KitchenKDS: React.FC = () => {
                 <span className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest shadow-lg ${getStatusBadgeColor(order.status)}`}>
                   {order.status.toUpperCase()}
                 </span>
-                <span className={`text-2xl font-black tabular-nums tracking-tighter ${getTimerColor(order.status)}`}>
-                  {formatTime(order.seconds)}
-                </span>
+                <div className="flex items-center gap-2">
+                  {order.status === 'atrasado' && (
+                    <span className="material-symbols-outlined text-danger animate-bounce text-xl">speed</span>
+                  )}
+                  <span className={`text-2xl font-black tabular-nums tracking-tighter ${getTimerColor(order.status)}`}>
+                    {formatTime(order.seconds)}
+                  </span>
+                </div>
               </div>
 
               <div className="mt-1">

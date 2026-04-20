@@ -36,7 +36,7 @@ const MenuView: React.FC = () => {
       setIsLoading(true);
       setFetchError(null);
       try {
-        const response = await fetch('http://localhost:3001/api/produtos');
+        const response = await fetch('http://localhost:3000/api/produtos');
         if (!response.ok) throw new Error('Falha ao carregar cardápio');
         
         const data = await response.json();
@@ -100,7 +100,7 @@ const MenuView: React.FC = () => {
     // Se for item da API (não começa com "custom-"), atualiza no backend
     if (!updatedItem.id.startsWith('custom-')) {
       try {
-        const response = await fetch(`http://localhost:3001/api/produtos/${updatedItem.id}`, {
+        const response = await fetch(`http://localhost:3000/api/produtos/${updatedItem.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -134,7 +134,7 @@ const MenuView: React.FC = () => {
   const handleDeleteItem = async (id: string) => {
     if (!id.startsWith('custom-')) {
       try {
-        await fetch(`http://localhost:3001/api/produtos/${id}`, { method: 'DELETE' });
+        await fetch(`http://localhost:3000/api/produtos/${id}`, { method: 'DELETE' });
       } catch (error) {
         console.error('Erro ao deletar item:', error);
       }

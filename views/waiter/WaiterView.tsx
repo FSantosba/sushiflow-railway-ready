@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTables } from '../../context/TableContext';
 import { useServer } from '../../context/ServerContext';
+import { useAuth } from '../../context/AuthContext';
 import { sushiMenu, barMenu, kitchenMenu } from '../../utils/mockData';
 import { MenuItem, TableStatus } from '../../types';
 
@@ -36,7 +37,8 @@ const WaiterView: React.FC = () => {
     } = useTables();
 
     const { isOnline, sendOrder, pendingQueueCount } = useServer();
-    const currentUser = (window as any).__sushiCurrentUser || { name: 'Garçom' };
+    const { currentUser: authUser, logout } = useAuth();
+    const currentUser = authUser || { name: 'Garçom', id: '', role: 'waiter', pin: '', avatar: '', color: '', allowedScreens: [] };
 
     const [activeTab, setActiveTab] = useState<TabId>('mesas');
     const [category, setCategory] = useState<Category>('all');
@@ -241,8 +243,11 @@ const WaiterView: React.FC = () => {
                 <div className="px-5 py-6 bg-[#11161d] border-b border-white/5 flex justify-between items-center shadow-lg z-10 shrink-0">
                     <div>
                         <h1 className="text-2xl font-black text-white italic tracking-tighter">SALÃO</h1>
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Selecione uma mesa</p>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Olá, {currentUser.name}</p>
                     </div>
+                    <button onClick={() => { logout(); }} className="text-[10px] bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm">logout</span> Sair
+                    </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">

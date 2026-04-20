@@ -107,7 +107,7 @@ const DeliveryAppView: React.FC<DeliveryAppViewProps> = ({ onNavigate }) => {
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [orderSuccess, setOrderSuccess] = useState(false);
     const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
-    const [pixData, setPixData] = useState<{ pedidoId: string, pixCode: string, qrCode: string, total: number } | null>(null);
+    const [pixData, setPixData] = useState<{ pedidoId: string, pixCode: string, qrCode: string, totalGeral: number } | null>(null);
     const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
 
     const [toasts, setToasts] = useState<ToastMsg[]>([]);
@@ -267,7 +267,7 @@ const DeliveryAppView: React.FC<DeliveryAppViewProps> = ({ onNavigate }) => {
 
         try {
             if (paymentMethod === 'pix') {
-                const response = await axios.post('http://localhost:3001/api/checkout', {
+                const response = await axios.post('http://localhost:3000/api/checkout', {
                     cliente_id: 'cliente-logado-123',
                     itens: cart.map(c => ({ id: c.item.id, preco: c.item.price, quantidade: c.qty })),
                     taxa_entrega: effectiveDeliveryFee
@@ -278,7 +278,7 @@ const DeliveryAppView: React.FC<DeliveryAppViewProps> = ({ onNavigate }) => {
                         pedidoId: response.data.pedido_id,
                         pixCode: response.data.pix_copia_e_cola,
                         qrCode: response.data.pix_qr_code,
-                        total: response.data.total
+                        totalGeral: response.data.total || response.data.totalGeral
                     });
                 }
                 setIsProcessingCheckout(false);
@@ -350,7 +350,7 @@ const DeliveryAppView: React.FC<DeliveryAppViewProps> = ({ onNavigate }) => {
                 pedidoId={pixData.pedidoId}
                 pixCode={pixData.pixCode}
                 qrCodeBase64={pixData.qrCode}
-                total={pixData.total}
+                totalGeral={pixData.totalGeral}
                 onPaymentConfirmed={onPixPaymentSuccess}
                 onCancel={() => setPixData(null)}
             />

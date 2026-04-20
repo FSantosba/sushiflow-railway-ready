@@ -264,11 +264,15 @@ const OrderCard: React.FC<{ order: Order; onAdvance: (id: string) => void; onCan
             ? `${order.enderecoEntrega.rua}, ${order.enderecoEntrega.numero}${order.enderecoEntrega.bairro ? ' – ' + order.enderecoEntrega.bairro : ''}`
             : 'Balcão');
         const payMethod = (order.metodoPagamento || 'pix').toLowerCase() as PayMethod;
-        const total = order.total ?? order.totalGeral ?? 0;
+        const total = order.totalGeral ?? 0;
+
+        const createdAt = new Date(order.createdAt).getTime();
+        const minutes = Math.floor((Date.now() - createdAt) / 60000);
+        const isLate = (order.status === OrderStatus.NEW || order.status === OrderStatus.PENDING) && minutes >= 15;
 
         return (
             <div className={`bg-card-dark border rounded-2xl overflow-hidden transition-all
-                ${isNew ? 'border-amber-400/40 shadow-lg shadow-amber-500/5' : 'border-border-dark'}
+                ${isLate ? 'border-rose-500 ring-2 ring-rose-500/20 animate-pulse-late shadow-[0_0_15px_rgba(244,63,94,0.3)]' : isNew ? 'border-amber-400/40 shadow-lg shadow-amber-500/5' : 'border-border-dark'}
                 ${isCanceled ? 'opacity-50' : ''}`}>
 
                 {/* Header */}
@@ -277,7 +281,10 @@ const OrderCard: React.FC<{ order: Order; onAdvance: (id: string) => void; onCan
                         <span className="material-symbols-outlined text-xs">{m.icon}</span>
                         {m.label}
                     </span>
-                    <span className="text-slate-500 text-xs">{elapsed(order.createdAt)} · #{order.id}</span>
+                    <span className="text-slate-500 text-xs flex items-center gap-1">
+                        {isLate && <span className="material-symbols-outlined text-rose-500 text-xs animate-bounce">local_fire_department</span>}
+                        {elapsed(order.createdAt)} · #{order.id}
+                    </span>
                 </div>
 
                 {/* Customer info */}
@@ -457,7 +464,7 @@ const DeliveryManagerView: React.FC = () => {
 
     // ── Analytics ────────────────────────────────────────────
     const delivered = deliveryOrders.filter(o => o.status === OrderStatus.COMPLETED);
-    const todayRev = delivered.reduce((s, o) => s + (o.total ?? o.totalGeral ?? 0), 0) + 224.30;
+    const todayRev = delivered.reduce((s, o) => s + (o.totalGeral ?? 0), 0) + 224.30;
     const todayOrders = delivered.length + 8;
     const avgTicket = todayOrders > 0 ? todayRev / todayOrders : 0;
 

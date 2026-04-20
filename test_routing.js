@@ -1,5 +1,5 @@
 async function testRouting() {
-  const serverUrl = 'http://localhost:3001';
+  const serverUrl = 'http://localhost:3000';
   
   const payloadLegacy = {
     mesa: '99',

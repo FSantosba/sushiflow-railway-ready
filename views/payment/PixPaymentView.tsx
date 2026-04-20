@@ -5,7 +5,7 @@ interface PixPaymentViewProps {
     pedidoId: string;
     pixCode: string;
     qrCodeBase64: string;
-    total: number;
+    totalGeral: number;
     onPaymentConfirmed: () => void;
     onCancel: () => void;
 }
@@ -14,7 +14,7 @@ const PixPaymentView: React.FC<PixPaymentViewProps> = ({
     pedidoId, 
     pixCode, 
     qrCodeBase64, 
-    total, 
+    totalGeral, 
     onPaymentConfirmed, 
     onCancel 
 }) => {
@@ -27,7 +27,7 @@ const PixPaymentView: React.FC<PixPaymentViewProps> = ({
             try {
                 // Aqui consultamos o status do pedido no backend
                 // No nosso caso, o webhook vai atualizar o status no DB, então verificamos o status do pedido.
-                const response = await axios.get(`http://localhost:3001/api/pedidos/${pedidoId}`);
+                const response = await axios.get(`http://localhost:3000/api/pedidos/${pedidoId}`);
                 if (response.data && response.data.status === 'pago') {
                     onPaymentConfirmed();
                     clearInterval(interval);
@@ -70,7 +70,7 @@ const PixPaymentView: React.FC<PixPaymentViewProps> = ({
                 {/* Total */}
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex justify-between items-center">
                     <span className="text-xs font-black uppercase tracking-widest text-slate-500">Valor a Pagar:</span>
-                    <span className="text-xl font-black italic">R$ {total.toFixed(2)}</span>
+                    <span className="text-xl font-black italic">R$ {totalGeral.toFixed(2)}</span>
                 </div>
 
                 {/* Copia e Cola */}
